@@ -17,7 +17,7 @@ MASCARA_FINAL EQU 80H         ; mascara (1000 0000)
 ; *********************************************************************************
 PLACE 2000H
 nave:
-  string 7, 2, 7, terminador
+  string 11h, 0Ah, 4h, 0Ah, 11h, terminador
 
 
 PLACE     1000H
@@ -45,7 +45,7 @@ ciclo:
   MOV R3, 10H          ; coordenada X
   MOV R4, 20H          ; coordenada Y
   MOV R1, nave
-  MOV R7, 4             ; largura do objeto
+  MOV R11, 5        ; largura do objeto
   CALL desenha_objeto ; desenhar objeto
   JMP fim
 
@@ -56,7 +56,8 @@ ciclo:
 ;
 ; Argumentos:   R3 - Coordenada X
 ;               R4 - Coordenada Y
-;               R1- Base da tabela do objeto
+;               R7 - largura
+;               R11- Base da tabela do objeto
 ; **********************************************************************
 desenha_objeto:
   PUSH R2
@@ -77,27 +78,39 @@ sair_desenha_objeto:
 ;
 ; Argumentos:   R3 - Coordenada X (linhas)
 ;               R4 - Coordenada Y (colunas)
+;               R11 - largura do objeto
 ;               R2- Linha a desenhar
 ; **********************************************************************
 desenha_linha:
+  PUSH R6
   PUSH R7
   PUSH R8
-  PUSH R6
+  PUSH R9
+  PUSH R11
+
+  MOV R9, R4  ; variavel auxiliar com o valor da largura
   MOV R7, MASCARA_INICIAL ; inicializa a mascara (0000 0001)
   MOV R8, 0 ;
 le_bit:
+  CMP R11,0
+  JZ sair_desenha_linha
   MOV R6, R2        ; variavel auxiliar com o valor lido da tabela
   CMP R6, R8        ; se é 0, saimos
   JZ sair_desenha_linha
   AND R6, R7        ; aplicar a mascara
   CALL desenha_pixel
   SHL R7, 1
+  SUB R11, 1        ; subtrair 1
   JMP le_bit
 sair_desenha_linha:
-  ADD R3,1
-  POP R6
+  ADD R3,1  ; proxima linha
+  MOV R10, R4
+
+  POP R11
+  POP R9
   POP R8
   POP R7
+  POP R6
   RET
 
 
@@ -106,12 +119,11 @@ sair_desenha_linha:
 ; DESENHA_PIXEL - Desenha um pixel
 ;
 ; Argumentos:   R3 - Coordenada X (linha)
-;               R4 - Coordenada Y (coluna)
+;               R9 - Coordenada Y (coluna)
 ;               R6-  0 pixel apagado, 1 pixel acesso
 ; **********************************************************************
 desenha_pixel:
       PUSH  R0
-      PUSH R10
 
       MOV R10, 0
       CMP R6, R10
@@ -123,14 +135,14 @@ desenha:
       MOV  [R0], R3           ; seleciona a linha
 
       MOV  R0, DEFINE_COLUNA
-      MOV  [R0], R4           ; seleciona a coluna
+      MOV  [R0], R9           ; seleciona a coluna
 
       MOV  R0, DEFINE_PIXEL
       MOV  [R0], R6           ; escreve o pixel com a cor da caneta na linha e coluna selecionadas
 
-      ADD R4, 1 ; proxima coluna
+      ADD R9, 1 ; proxima coluna
 
-      POP R10
+
       POP  R0
       RET
 

@@ -1,6 +1,4 @@
 ; PROJETO - VERSÃO FINAL
-; TESTE
-
 
 terminador  EQU 0
 DEFINE_LINHA    EQU 600AH      ; endereço do comando para definir a linha

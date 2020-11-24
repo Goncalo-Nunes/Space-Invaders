@@ -59,6 +59,8 @@ ciclo:
 ; **********************************************************************
 desenha_objeto:
   PUSH R2
+  PUSH R10
+  PUSH R11
 le_elemento:
   MOVB R2, [R1]           ; ler elemento da string
   CMP R2, terminador      ; verificar se já chegamos ao fim da tabela
@@ -67,6 +69,8 @@ le_elemento:
   ADD R1,1                ; proximo elemento da string
   JMP le_elemento    ; repetir até chegar ao fim da tabela
 sair_desenha_objeto:
+  POP R11
+  POP R10
   POP R2
   RET
 

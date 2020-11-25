@@ -4,18 +4,46 @@ terminador  EQU 0
 DEFINE_LINHA    EQU 600AH      ; endereço do comando para definir a linha
 DEFINE_COLUNA   EQU 600CH      ; endereço do comando para definir a coluna
 DEFINE_PIXEL    EQU 601AH     ; endereço do comando para escrever um pixel
+APAGA_ECRA     EQU 6000H     ; endere�o do comando para apagar todos os pixels do ecra selecionado
 APAGA_ECRAS     EQU 6002H      ; endere�o do comando para apagar todos os pixels de todos os ecr�s
 APAGA_AVISO     EQU 6040H      ; endere�o do comando para apagar o aviso de nenhum cen�rio selecionado
+COR_CANETA EQU 6014h        ; endereço do comando para mudar a cor da caneta
 
 MASCARA_INICIAL EQU 01H       ; mascara (0000 0001)
 MASCARA_FINAL EQU 80H         ; mascara (1000 0000)
 
+COL_MAX EQU 63
+LIN_MAX EQU 31
+
+LARGURA_NAVE EQU 5
+
+VERDE EQU 0F0F0H
+VERMELHO EQU 0FF00H
+AMARELO EQU 0FFF0H
+
+
 ; *********************************************************************************
-; * Dados
+; * Objetos
 ; *********************************************************************************
 PLACE 2000H
-nave:
-  string 11h, 0Ah, 4h, 0Ah, 11h, terminador
+nave_pixeis:
+  string 4h, 0Eh, 1Fh, 4h, 0Ah, terminador
+
+nave_coordenadas:
+  word 27               ; linha
+  word 31               ; coluna
+
+
+
+
+
+; *********************************************************************************
+; Variaveis de estado
+; *********************************************************************************
+
+jogo: WORD 1            ; estado do jogo (-1 = por começar, 0 = pausa , 1 = a correr)
+
+tecla_premida: WORD 1   ; tecla premida (-1 = nao houve tecla, (0-F) = tecla do teclado )
 
 
 PLACE     1000H
@@ -40,12 +68,97 @@ inicio:
 
 
 ciclo:
-  MOV R3, 10H          ; coordenada X
-  MOV R4, 20H          ; coordenada Y
-  MOV R1, nave
-  MOV R11, 5        ; largura do objeto
+  CALL teclado
+  CALL nave
+  JMP ciclo
+
+
+
+
+teclado:
+  RET
+
+
+nave:
+  PUSH R1
+  MOV R1, jogo
+  MOV R1, [R1]        ; le o estado do jogo
+  CMP R1, 1           ; se o jogo nao estiver a correr saimos
+  JNZ sair_nave
+  ;CALL desenha_nave
+  CALL movimenta_nave ; movimenta a nave
+  CALL desenha_nave ; desenha a nave
+sair_nave:
+  POP R1
+  RET
+
+
+
+movimenta_nave:
+  PUSH R2
+  PUSH R5
+  PUSH R6
+  PUSH R7
+  MOV R2, tecla_premida
+  MOV R2, [R2]      ; verifica a tecla premida
+  CMP R2, 0         ; se a tecla pressionada for a tecla 0 entao movimentamos a nave para a esquerda
+  JZ movimenta_nave_esquerda
+  CMP R2, 2         ; se a tecla pressionada for a tecla 2 entao movimentamos a nave para a esquerda
+  JZ movimenta_nave_direita
+  JMP sair_movimenta_nave ; sair da rotina
+movimenta_nave_esquerda:
+  MOV R7, 0             ; limite esquerdo do ecra (coluna 0)
+  MOV R5, nave_coordenadas
+  MOV R6, [R5 + 2]      ; obter as coordenadas da nave
+  CMP R6, R7            ; limitar o movimento da nave no lado esquerdo do ecra
+  JLE sair_movimenta_nave
+  SUB R6, 1             ; subtrair uma coluna à posicao atual
+  JMP altera_posicao
+movimenta_nave_direita:
+  MOV R7, COL_MAX       ; limite direito do ecra (coluna 63)
+  SUB R7, LARGURA_NAVE           ; subtrair a largura da nave
+  MOV R5, nave_coordenadas
+  MOV R6, [R5 + 2]
+  CMP R6, R7          ;limitar o movimento da nave no lado direito do ecra
+  JGT sair_movimenta_nave
+  ADD R6, 1   ; adicionar uma coluna à posicao atual
+  JMP altera_posicao
+altera_posicao:
+  MOV [R5 + 2], R6  ; escreve a nova posicao na memoria
+  CALL apagar_ecra  ;apaga o ecra para dar lugar ao objeto desenhado na nova posicao
+sair_movimenta_nave:
+  POP R7
+  POP R6
+  POP R5
+  POP R2
+  RET
+
+
+
+
+
+
+
+desenha_nave:
+  PUSH R1
+  PUSH R3
+  PUSH R4
+  PUSH R5
+  PUSH R11
+  MOV R5, nave_coordenadas
+  MOV R3, [R5]          ; coordenada X
+  MOV R4, [R5 + 2]         ; coordenada Y
+  MOV R1, nave_pixeis
+  MOV R11, LARGURA_NAVE        ; largura da nave
   CALL desenha_objeto ; desenhar objeto
-  JMP fim
+  POP R11
+  POP R5
+  POP R4
+  POP R3
+  POP R1
+
+
+
 
 
 
@@ -55,7 +168,7 @@ ciclo:
 ; Argumentos:   R3 - Coordenada X
 ;               R4 - Coordenada Y
 ;               R7 - largura
-;               R11- Base da tabela do objeto
+;               R1- Base da tabela do objeto
 ; **********************************************************************
 desenha_objeto:
   PUSH R2
@@ -131,7 +244,6 @@ desenha_pixel:
       CMP R6, R10
       JZ desenha
       MOV R6, 1
-
 desenha:
       MOV  R0, DEFINE_LINHA
       MOV  [R0], R3           ; seleciona a linha
@@ -148,5 +260,14 @@ desenha:
       POP  R0
       RET
 
-fim:
-JMP fim
+
+
+apagar_ecra:
+  PUSH R0
+  PUSH R1
+  MOV R1, 1
+  MOV  R0, APAGA_ECRA
+  MOV  [R0], R1            ; apaga todos os pixels de todos os ecrãs (o valor de R1 não é relevante)
+  POP R1
+  POP R0
+  RET

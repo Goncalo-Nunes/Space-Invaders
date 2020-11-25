@@ -4,6 +4,8 @@ terminador  EQU 0
 DEFINE_LINHA    EQU 600AH      ; endereço do comando para definir a linha
 DEFINE_COLUNA   EQU 600CH      ; endereço do comando para definir a coluna
 DEFINE_PIXEL    EQU 601AH     ; endereço do comando para escrever um pixel
+DEFINE_VIDEO EQU 6048H
+PLAY_VIDEO EQU 605AH
 APAGA_ECRA     EQU 6000H     ; endere�o do comando para apagar todos os pixels do ecra selecionado
 APAGA_ECRAS     EQU 6002H      ; endere�o do comando para apagar todos os pixels de todos os ecr�s
 APAGA_AVISO     EQU 6040H      ; endere�o do comando para apagar o aviso de nenhum cen�rio selecionado
@@ -26,6 +28,8 @@ AMARELO EQU 0FFF0H
 ; * Objetos
 ; *********************************************************************************
 PLACE 2000H
+
+; NAVE
 nave_pixeis:
   string 4h, 0Eh, 1Fh, 4h, 0Ah, terminador
 
@@ -33,6 +37,30 @@ nave_coordenadas:
   word 27               ; linha
   word 31               ; coluna
 
+; ASTEROIDES
+asteroide_3:
+  string 2H, 7FH, 2FH, terminador
+
+asteroide_4:
+  string 6H, 0FH, 0FH, 6H, terminador
+
+asteroide_5:
+  string 0EH, 1FH, 1FH, 1FH, 0EH, terminador
+
+
+; NAVE INIMIGA
+nave_inimiga_3:
+  string 5H, 2H, 5H, terminador
+
+nave_inimiga_4:
+  string 9H, 6H, 6H, 9H, terminador
+
+nave_inimiga_5:
+  string 11H, 0AH, 4H, 0AH, 11H, terminador
+
+;EXPLOSAO
+explosao:
+  string 0AH, 15H, 0AH, 15H, 0AH, terminador
 
 
 
@@ -58,12 +86,18 @@ inicio:
   MOV  SP, SP_inicial      ; inicializa SP para a palavra a seguir
                          ; � �ltima da pilha
 
+  MOV R1, 0
   MOV  R0, APAGA_ECRAS
   MOV  [R0], R1            ; apaga todos os pixels de todos os ecrãs (o valor de R1 não é relevante)
 
   MOV  R0, APAGA_AVISO
   MOV  [R0], R1            ; apaga o aviso de nenhum cenário selecionado (o valor de R1 não é relevante)
 
+  MOV  R0, DEFINE_VIDEO
+  MOV  [R0], R1            ; define o video a tocar
+
+  MOV  R0, PLAY_VIDEO
+  MOV  [R0], R1            ; Toca o video
 
 
 

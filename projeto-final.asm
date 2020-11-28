@@ -24,6 +24,8 @@ COL_MAX EQU 63
 COL_MIN EQU 0
 LIN_MAX EQU 31
 
+DISPLAYS   EQU 0A000H ; endereço do display de 7 segmentos (periférico POUT-1)
+
 LARGURA_NAVE EQU 5
 
 VERDE EQU 0F0F0H
@@ -47,11 +49,17 @@ TECLA_TERMINAR EQU 0EH
 TEC_LIN    EQU 0C000H  ; endereço das linhas do teclado (periférico POUT-2)
 TEC_COL    EQU 0E000H  ; endereço das colunas do teclado (periférico PIN)
 
-IMAGEM_PAUSA EQU 0
+IMAGEM_INICIO EQU 0
+IMAGEM_PAUSA EQU 1
+IMAGEM_GAMEOVER EQU 2
+IMAGEM_EXPLOSAO EQU 3
 
-; *********************************************************************************
-; * Objetos
-; *********************************************************************************
+INDICE_OVNIS EQU 0 ; indice da interrupção responsavel pela energia na tabela de interrupções
+INDICE_MISSIL EQU 1 ; indice da interrupção responsavel pela energia na tabela de interrupções
+INDICE_ENERGIA EQU 2 ; indice da interrupção responsavel pela energia na tabela de interrupções
+
+
+
 PLACE 2000H
 
 ; NAVE
@@ -89,10 +97,10 @@ explosao:
 
 
 ; *********************************************************************************
-; Funcao nave
+; Funcao nave - funcão das teclas da nave
 ; *********************************************************************************
 func_nave:
-  WORD -VELOCIDADE_NAVE      ; tecla 0
+  WORD -VELOCIDADE_NAVE     ; tecla 0
   WORD DISPARA_MISSIL       ; tecla 1
   WORD VELOCIDADE_NAVE      ; tecla 2
   WORD NAO_MOVE             ; tecla 3
@@ -116,12 +124,27 @@ func_nave:
 jogo: WORD -1           ; estado do jogo (-1 = por começar, 0 = pausa , 1 = a correr)
 
 tecla_premida: WORD -1   ; tecla premida (-1 = nao houve tecla, (0-F) = tecla do teclado )
-ultima_tecla: word -1 ; ultima tecla premida (-1 = nao houve tecla, (0-F) = tecla do teclado )
 
-energia: word ENERGIA_INICIAL  ; energia da nave
+ultima_tecla: WORD -1 ; ultima tecla premida (-1 = nao houve tecla, (0-F) = tecla do teclado )
+
+energia: WORD ENERGIA_INICIAL  ; energia da nave
 
 
-evento_int: WORD 0   ; se =1 indica que aconteceu a interrupção do relogio energia
+
+
+; *********************************************************************************
+; Interrupções
+; *********************************************************************************
+tabela_interrupcoes:
+  WORD relogio_ovnis ; Interrupçao 0
+  WORD relogio_missil ; Interrupçao 1
+  WORD relogio_energia ; Interrupçao 2
+
+tabela_eventos:
+  WORD 0 ; se =1 indica que aconteceu a interrupção 0
+  WORD 0 ; se =1 indica que aconteceu a interrupção 0
+  WORD 0 ; se =1 indica que aconteceu a interrupção 0
+
 
 
 PLACE     1000H
@@ -133,9 +156,9 @@ SP_inicial:                   ; este � o endere�o (1200H) com que o SP deve 
 
 PLACE 0
 inicio:
-  MOV  SP, SP_inicial      ; inicializa SP para a palavra a seguir
-                         ; � �ltima da pilha
+  MOV  SP, SP_inicial      ; inicializa SP
 
+  MOV BTE, tabela_interrupcoes ; inicializa a Tabela de Exceções
 
   MOV R1, 0
   MOV  R0, APAGA_ECRAS
@@ -144,18 +167,26 @@ inicio:
   MOV  R0, APAGA_AVISO
   MOV  [R0], R1            ; apaga o aviso de nenhum cenário selecionado (o valor de R1 não é relevante)
 
+  CALL apagar_imagem ; apaga qualquer imagem do mediacenter
 
+  MOV R4, IMAGEM_INICIO
+  CALL mostra_imagem ; mostra a imagem inicial
+  MOV R4, 0
 
-
-
-
+  ; permitir interrupções
+  EI0
+	EI1
+  EI2
+	EI
 
 
 ; ciclo principal do programa
 ciclo:
+
   CALL teclado
   CALL nave
   CALL controlo
+
   JMP ciclo
 
 
@@ -234,30 +265,40 @@ nave:
   JNZ sair_nave
 
 nave_energia:
-  MOV R1, evento_int
-  MOV R1, [R1]
+  MOV R1, tabela_eventos 	; Obt�m endere�o da mem�ria onde estão guardados os eventos
+  MOV R2, INDICE_ENERGIA
+  SHL R2, 1 ; multiplicar o indice por 2 porque vamos aceder a uma tabela de words
+  MOV R1, [R1 + R2] ; ler o valor da tabela de eventos no indice especificado
   CMP R1, 1  ; verificar se aconteceu a interropeçao responsavel pela diminuição da energia
   JNZ nave_ler_tecla ; se nao, continuamos
-  CALL diminuir_energia ; se sim, diminuimos a energia e só depois continuamos
+  CALL atender_evento_energia ; se sim, atendemos o evento e só depois continuamos
 
 nave_ler_tecla:
-  MOV R2, tecla_premida
+  MOV R2, tecla_premida ; Obt�m o endere�o da mem�ria onde a tecla premida est� guardada
   MOV R2, [R2]      ; verifica a tecla premida
   CMP R2, 0         ; se a tecla pressionada for menor que 0 significa que nenhuma tecla foi pressionada
-  JLT sair_nave    ; logo podemos sair da rotina e nao temos que movimentar a nave
+  JLT sair_nave    ; logo nao temos que movimentar a nave
+  MOV R3, TECLA_COMECAR ; verificar se a tecla pressionada é a de começar o jogo
+  CMP R2, R3  ; se a tecla pressionada for a de começar o jogo entao desenhamos a nave pela primeira vez
+  JZ lida_tecla_comecar
+
   SHL R2, 1         ; multiplicar R2 por 2 porque a func_nave é uma tabela de words
   MOV R3, func_nave ; base da tabela das funcionalidades da nave
   MOV R3, [R3 + R2] ; obter a funcionalidade da tecla premida
-
   CMP R3, NAO_MOVE ; se a tecla nao for relevante entao saimos da rotina
   JZ sair_nave
-  CMP R3, DISPARA_MISSIL ; se a tecla for a de disparar o missil, procedemos como tal
+  CMP R3, DISPARA_MISSIL ; se a tecla for a de disparar o missil saltamos para dispara_missil
   JZ nave_dispara_missil
+  JMP nave_movimenta   ; caso a tecla premida nao seja nenhuma das anterioes então movimentamos a nave
 
-  ; caso a tecla premida nao seja nenhuma das anterioes então movimentamos a nave
+lida_tecla_comecar:
+  MOV R3, 0 ; neste caso queremos a velocidade a 0, para apenas desenhar a nave
+
+nave_movimenta:
   CALL movimenta_nave ; movimenta a nave
   CALL desenha_nave ; desenha a nave
   JMP sair_nave
+
 nave_dispara_missil:
 
 sair_nave:
@@ -265,6 +306,31 @@ sair_nave:
   POP R2
   POP R1
   RET
+
+
+
+atender_evento_energia:
+  PUSH R0
+  PUSH R1
+  PUSH R2
+
+  MOV R0, 0
+  MOV R2, INDICE_ENERGIA
+  SHL R2, 1   ; multiplicar o indice por 2 porque vamos aceder a uma tabela de words
+  MOV R1, tabela_eventos  ; Obtem endere�o do evento da rotina 2 (relogio_energia)
+  MOV [R1 + R2], R0 	; Sinaliza que esta foi tratada movendo 0 para a flag
+  CALL diminuir_energia
+
+  POP R2
+  POP R1
+  POP R0
+  RET
+
+
+
+
+
+
 
 
 
@@ -294,45 +360,48 @@ controlo:
   MOV R5, TECLA_TERMINAR
   CMP R2, R5
   JZ terminar         ; verificar se a tecla premida foi a tecla de terminar
-  JMP sair_controlo
+  JMP sair_controlo ; caso seja uma tecla irrelevante, saimos
 
-comecar:
-  MOV R3, JOGO_CORRER ;
-  CALL inicializar    ; inizialiar tudo com o seu valor original
-  CALL tocar_video    ; toca o video
-  JMP modificar_estado
+  comecar:
+    MOV R3, JOGO_CORRER ;
+    CALL inicializar    ; inizialiar tudo com o seu valor original
+    CALL tocar_video    ; toca o video
+    JMP modificar_estado ; salta para modificar o estado do jogo
 
-pausar:
-  CMP R1, JOGO_CORRER
-  JZ pausa_jogo   ; se o jogo esta a correr mudamos o seu estado para pausa
-  CMP R1, JOGO_PAUSA
-  JZ despausa_jogo ; se o jogo esta em pausa mudamos o seu estado para correr
-  JMP sair_controlo
-  pausa_jogo:
-    MOV R3, JOGO_PAUSA
-    CALL pausa_media
-    MOV R4, IMAGEM_PAUSA
+  pausar:
+    CMP R1, JOGO_CORRER
+    JZ pausa_jogo   ; se o jogo esta a correr mudamos o seu estado para pausa
+    CMP R1, JOGO_PAUSA
+    JZ despausa_jogo ; se o jogo esta em pausa mudamos o seu estado para correr
+    JMP sair_controlo
+    pausa_jogo:
+      MOV R3, JOGO_PAUSA
+      CALL pausa_media ; pausa os recursos multimedia
+      MOV R4, IMAGEM_PAUSA ; define a imagem a mostar, neste caso a imagem de pausa
+      CALL mostra_imagem ; mostra a imagem selecionada
+      JMP modificar_estado ; salta para modificar o estado do jogo
+    despausa_jogo:
+      CALL despausa_media ; despausa os recursos multimedia
+      CALL apagar_imagem ; apaga a imagem de foreground
+      MOV R3, JOGO_CORRER
+      JMP modificar_estado ; salta para modificar o estado do jogo
+
+  terminar:
+    MOV R4, IMAGEM_GAMEOVER
     CALL mostra_imagem
-    JMP modificar_estado
-  despausa_jogo:
-    CALL despausa_media
-    CALL apagar_imagem
-    MOV R3, JOGO_CORRER
+    CALL pausa_media
+    MOV R3, -1
     JMP modificar_estado
 
-terminar:
-  MOV R3, -1
-  JMP modificar_estado
-
-modificar_estado:
-  CALL alterar_estado_jogo
-sair_controlo:
-  POP R5
-  POP R4
-  POP R3
-  POP R2
-  POP R1
-  RET
+  modificar_estado:
+    CALL alterar_estado_jogo ; modifica a variavel de estado do jogo para o novo valor
+  sair_controlo:
+    POP R5
+    POP R4
+    POP R3
+    POP R2
+    POP R1
+    RET
 
 
 
@@ -355,7 +424,7 @@ desenha_nave:
   POP R4
   POP R3
   POP R1
-
+  RET
 
 ; **********************************************************************
 ; INICIALIZAR - INICIALIZA O JOGO
@@ -366,7 +435,7 @@ inicializar:
   MOV R1, energia  ; base da tabela da energia
   MOV R2, ENERGIA_INICIAL ; inicializa r2 com a energia inicial
   MOV [R1], R2 ; guarda o valor na memoria
-  CALL apagar_imagem
+  CALL apagar_imagem ; apagar qualquer imagem do mediacenter
   POP R2
   POP R1
   RET
@@ -432,6 +501,7 @@ tocar_video:
 ; **********************************************************************
 mostra_imagem:
   PUSH R0
+  CALL apagar_imagem
   MOV  R0, MOSTRAR_IMAGEM
   MOV  [R0], R4           ; Mostra a imagem no cenario frontal
   POP R0
@@ -462,41 +532,42 @@ movimenta_nave:
   PUSH R6
   PUSH R7
 
-verifica_limites:
-  MOV R7, COL_MAX       ; limite direito do ecra (coluna 63)
-  SUB R7, LARGURA_NAVE           ; subtrair a largura da nave
-  MOV R5, nave_coordenadas  ; base da tabela das coordenadas
-  MOV R6, [R5 + 2]      ; obter a coluna onde se situa a nave
-  CMP R6, R7         ; comparar com a coluna máxima
-  JGT pode_virar_esquerda ; se chegamos à coluna maxima, a unica opçao é andar para a esquerda
+  verifica_limites:
+    MOV R7, COL_MAX       ; limite direito do ecra (coluna 63)
+    SUB R7, LARGURA_NAVE           ; subtrair a largura da nave
+    MOV R5, nave_coordenadas  ; base da tabela das coordenadas
+    MOV R6, [R5 + 2]      ; obter a coluna onde se situa a nave
+    CMP R6, R7         ; comparar com a coluna máxima
+    JGT pode_virar_esquerda ; se chegamos à coluna maxima, a unica opçao é andar para a esquerda
 
-  MOV R7, COL_MIN
-  CMP R6, R7      ; comparar com a coluna minima
-  JLE pode_virar_direita ; se chegamos à coluna minima, a unica opçao é andar para a direita
+    MOV R7, COL_MIN
+    CMP R6, R7      ; comparar com a coluna minima
+    JLE pode_virar_direita ; se chegamos à coluna minima, a unica opçao é andar para a direita
 
-  JMP altera_posicao ; se nao estivermos a tocar nos limites do ecra entao alteramos a posicao da nave
+    JMP altera_posicao ; se nao estivermos a tocar nos limites do ecra entao alteramos a posicao da nave
 
-pode_virar_esquerda:
-  CMP R3, 0 ; verificar se a velocidade é menor que 0, nesse caso estamos a tentar andar para a esquerda
-  JLT altera_posicao ; se sim, alteramos a posicao
-  JMP sair_movimenta_nave ; caso contrario saimos da rotina e nao movimentamos a nave
+    pode_virar_esquerda:
+      CMP R3, 0 ; verificar se a velocidade é menor que 0, nesse caso estamos a tentar andar para a esquerda
+      JLT altera_posicao ; se sim, alteramos a posicao
+      JMP sair_movimenta_nave ; caso contrario saimos da rotina e nao movimentamos a nave
 
-pode_virar_direita:
-  CMP R3, 0 ; verificar se a velocidade é maior que 0, nesse caso estamos a tentar andar para a direita
-  JGT altera_posicao ; se sim, alteramos a posicao
-  JMP sair_movimenta_nave ; caso contrario saimos da rotina e nao movimentamos a nave
+    pode_virar_direita:
+      CMP R3, 0 ; verificar se a velocidade é maior que 0, nesse caso estamos a tentar andar para a direita
+      JGT altera_posicao ; se sim, alteramos a posicao
+      JMP sair_movimenta_nave ; caso contrario saimos da rotina e nao movimentamos a nave
 
-altera_posicao:
-  ; caso geral
-  ADD R6, R3   ; adicionar a velocidade à posicao atual
-  MOV [R5 + 2], R6  ; escreve a nova posicao na memoria
-  CALL apagar_ecra  ;apaga o ecra para dar lugar ao objeto desenhado na nova posicao
-sair_movimenta_nave:
-  POP R7
-  POP R6
-  POP R5
-  POP R2
-  RET
+  altera_posicao:
+    ; caso geral
+    ADD R6, R3   ; adicionar a velocidade à posicao atual
+    MOV [R5 + 2], R6  ; escreve a nova posicao na memoria
+    CALL apagar_ecra  ;apaga o ecra para dar lugar ao objeto desenhado na nova posicao
+
+  sair_movimenta_nave:
+    POP R7
+    POP R6
+    POP R5
+    POP R2
+    RET
 
 
 
@@ -523,18 +594,18 @@ desenha_objeto:
   PUSH R2
   PUSH R10
   PUSH R11
-le_elemento:
-  MOVB R2, [R1]           ; ler elemento da string
-  CMP R2, terminador      ; verificar se já chegamos ao fim da tabela
-  JZ sair_desenha_objeto              ; se sim, saimos da rotina
-  CALL desenha_linha      ; desenha a linha lida da tabela
-  ADD R1,1                ; proximo elemento da string
-  JMP le_elemento    ; repetir até chegar ao fim da tabela
-sair_desenha_objeto:
-  POP R11
-  POP R10
-  POP R2
-  RET
+  le_elemento:
+    MOVB R2, [R1]           ; ler elemento da string
+    CMP R2, terminador      ; verificar se já chegamos ao fim da tabela
+    JZ sair_desenha_objeto              ; se sim, saimos da rotina
+    CALL desenha_linha      ; desenha a linha lida da tabela
+    ADD R1,1                ; proximo elemento da string
+    JMP le_elemento    ; repetir até chegar ao fim da tabela
+  sair_desenha_objeto:
+    POP R11
+    POP R10
+    POP R2
+    RET
 
 
 ; **********************************************************************
@@ -555,27 +626,27 @@ desenha_linha:
   MOV R9, R4  ; variavel auxiliar com o valor da largura
   MOV R7, MASCARA_INICIAL ; inicializa a mascara (0000 0001)
   MOV R8, 0 ;
-le_bit:
-  CMP R11,0
-  JZ sair_desenha_linha
-  MOV R6, R2        ; variavel auxiliar com o valor lido da tabela
-  CMP R6, R8        ; se é 0, saimos
-  JZ sair_desenha_linha
-  AND R6, R7        ; aplicar a mascara
-  CALL desenha_pixel
-  SHL R7, 1
-  SUB R11, 1        ; subtrair 1
-  JMP le_bit
-sair_desenha_linha:
-  ADD R3,1  ; proxima linha
-  MOV R10, R4
+  le_bit:
+    CMP R11,0
+    JZ sair_desenha_linha
+    MOV R6, R2        ; variavel auxiliar com o valor lido da tabela
+    CMP R6, R8        ; se é 0, saimos
+    JZ sair_desenha_linha
+    AND R6, R7        ; aplicar a mascara
+    CALL desenha_pixel
+    SHL R7, 1
+    SUB R11, 1        ; subtrair 1
+    JMP le_bit
+  sair_desenha_linha:
+    ADD R3,1  ; proxima linha
+    MOV R10, R4
 
-  POP R11
-  POP R9
-  POP R8
-  POP R7
-  POP R6
-  RET
+    POP R11
+    POP R9
+    POP R8
+    POP R7
+    POP R6
+    RET
 
 
 
@@ -593,39 +664,61 @@ desenha_pixel:
       CMP R6, R10
       JZ desenha
       MOV R6, 1
-desenha:
-      MOV  R0, DEFINE_LINHA
-      MOV  [R0], R3           ; seleciona a linha
+  desenha:
+        MOV  R0, DEFINE_LINHA
+        MOV  [R0], R3           ; seleciona a linha
+        MOV  R0, DEFINE_COLUNA
+        MOV  [R0], R9           ; seleciona a coluna
+        MOV  R0, DEFINE_PIXEL
+        MOV  [R0], R6           ; escreve o pixel com a cor da caneta na linha e coluna selecionadas
+        ADD R9, 1 ; proxima coluna
 
-      MOV  R0, DEFINE_COLUNA
-      MOV  [R0], R9           ; seleciona a coluna
-
-      MOV  R0, DEFINE_PIXEL
-      MOV  [R0], R6           ; escreve o pixel com a cor da caneta na linha e coluna selecionadas
-
-      ADD R9, 1 ; proxima coluna
-
-
-      POP  R0
-      RET
+        POP  R0
+        RET
 
 
 diminuir_energia:
   PUSH R1
   PUSH R2
+  PUSH R3
+  PUSH R4
 
   MOV R1, energia  ; base da tabela da energia
   MOV R2, [R1] ; le o valor de energia
   SUB R2, ENERGIA ; diminui a energia
   MOV [R1], R2 ; guarda o novo valor na memoria
+  CALL atualiza_display ; atualiza os displays com o novo valor da energia
+  CMP R2, 0 ; se o valor da energia for 0 então perdemos o jogo
+  JZ gameover
+  JMP sair_diminuir_energia
 
-  POP R2
-  POP R1
+    gameover:
+      MOV R3, -1
+      CALL alterar_estado_jogo ; altera o estado de jogo
+      MOV R4, IMAGEM_GAMEOVER
+      CALL mostra_imagem
+
+  sair_diminuir_energia:
+    POP R4
+    POP R3
+    POP R2
+    POP R1
+    RET
+
+
+
+; **********************************************************************
+; ATUALIZA_DISPLAY - Atualiza o display com um novo valor
+;
+; Argumento:   R2 - Valor a ser mostrado no display
+;
+; **********************************************************************
+atualiza_display:
+  PUSH R0
+  MOV R0, DISPLAYS
+  MOV [R0], R2      ; escreve linha e coluna nos displays
+  POP R0
   RET
-
-
-
-
 
 apagar_ecra:
   PUSH R0
@@ -636,3 +729,94 @@ apagar_ecra:
   POP R1
   POP R0
   RET
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+;*********************************************************************************
+;* Rotinas Interrup��o
+;*********************************************************************************
+
+relogio_ovnis:
+  PUSH R0  ; Salva registos
+  PUSH R1
+  PUSH R2
+
+  MOV R0, 1
+  MOV R2, INDICE_OVNIS
+  SHL R2, 1   ; multiplicar o indice por 2 porque vamos aceder a uma tabela de words
+  MOV R1, tabela_eventos  ; Obtem endere�o do evento da rotina 0 (relogio_ovnis)
+  MOV [R1 + R2], R0 	; Sinaliza que esta ocorreu movendo 1 para a flag
+
+  POP R2
+  POP R1	; Repoe registos
+  POP R0
+  RFE
+
+relogio_missil:
+  PUSH R0  ; Salva registos
+  PUSH R1
+  PUSH R2
+
+  MOV R0, 1
+  MOV R2, INDICE_MISSIL
+  SHL R2, 1   ; multiplicar o indice por 2 porque vamos aceder a uma tabela de words
+  MOV R1, tabela_eventos  ; Obtem endere�o do evento da rotina 1 (relogio_missil)
+  MOV [R1 + R2], R0 	; Sinaliza que esta ocorreu movendo 1 para a flag
+
+  POP R2
+  POP R1	; Repoe registos
+  POP R0
+  RFE
+
+relogio_energia:
+  PUSH R0  ; Salva registos
+  PUSH R1
+  PUSH R2
+
+  MOV R0, 1
+  MOV R2, INDICE_ENERGIA
+  SHL R2, 1   ; multiplicar o indice por 2 porque vamos aceder a uma tabela de words
+  MOV R1, tabela_eventos  ; Obtem endere�o do evento da rotina 2 (relogio_energia)
+  MOV [R1 + R2], R0 	; Sinaliza que esta ocorreu movendo 1 para a flag
+
+  POP R2
+  POP R1	; Repoe registos
+  POP R0
+  RFE

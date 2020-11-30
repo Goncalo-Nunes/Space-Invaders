@@ -78,6 +78,14 @@ ECRA_MISSIL EQU 1
 ECRA_OVNIS EQU 2
 ECRA_EXPLOSAO EQU 3
 
+VIDEO EQU 0
+SOM_MISSIL EQU 1
+SOM_EXPLOSAO_INIMIGO EQU 2
+SOM_EXPLOSAO_NAVE EQU 3
+SOM_MINERACAO EQU 4
+SOM_GAMEOVER EQU 5
+MUSICA EQU 6
+
 PLACE 2000H
 
 ; NAVE
@@ -292,6 +300,7 @@ nave:
   PUSH R6
   PUSH R7
   PUSH R8
+  PUSH R9
 
   MOV R1, jogo        ; base da tabela jogo
   MOV R1, [R1]        ; le o estado do jogo
@@ -358,7 +367,13 @@ nave:
         ADD R8, R5 ; adicionar o resultado obtido, obtendo assim a coluna central da nave
         MOV [R3 + 2], R8 ; mover esse valor para a coluna do missil
 
+        MOV R5, ENERGIA_DECREMENTO_MISSIL
+        CALL diminuir_energia
+        MOV R9, SOM_MISSIL
+        CALL tocar_media
+
   sair_nave:
+    POP R9
     POP R8
     POP R7
     POP R6
@@ -481,6 +496,7 @@ controlo:
   PUSH R3
   PUSH R4
   PUSH R5
+  PUSH R9
 
   MOV R1, jogo        ; base da tabela jogo
   MOV R1, [R1]        ; le o estado do jogo
@@ -508,7 +524,10 @@ controlo:
     JZ sair_controlo ; se sim, saimos da rotina
     MOV R3, JOGO_CORRER ;
     CALL inicializar    ; inizialiar tudo com o seu valor original
-    CALL tocar_video    ; toca o video
+    MOV R9, VIDEO
+    CALL tocar_media   ; toca o video
+    MOV R9, MUSICA
+    CALL tocar_media
     JMP modificar_estado ; salta para modificar o estado do jogo
 
   pausar:
@@ -534,12 +553,14 @@ controlo:
     CALL mostra_imagem ; mostra a imagem de gameover
     CALL pausa_media ; pausa recursos multimedia
     MOV R3, JOGO_TERMINAR
+    CALL apagar_ecras
     JMP modificar_estado ; define o estado do jogo como terminado
 
   modificar_estado:
     CALL alterar_estado_jogo ; modifica a variavel de estado do jogo para o novo valor
 
   sair_controlo:
+    POP R9
     POP R5
     POP R4
     POP R3
@@ -643,17 +664,20 @@ despausa_media:
 
 
 ; **********************************************************************
-; tocar_video - Toca o video
+; tocar_media - Toca o som / video especificado
+;
+; Argumentos: R9 - Video / som a reprduzir
+;
 ; **********************************************************************
-tocar_video:
+tocar_media:
   PUSH R0
   PUSH R1
-  MOV R1, 0
   MOV  R0, DEFINE_VIDEO
-  MOV  [R0], R1            ; define o video a tocar
+  MOV  [R0], R1            ; define o video a tocar (o valor de R1 nao é relevante)
+
 
   MOV  R0, PLAY_VIDEO
-  MOV  [R0], R1            ; Toca o video
+  MOV  [R0], R9           ; Toca o video
   POP R1
   POP R0
   RET
@@ -872,6 +896,7 @@ diminuir_energia:
   PUSH R4
   PUSH R6
   PUSH R7
+  PUSH R9
 
   MOV R1, energia  ; base da tabela da energia
   MOV R2, [R1] ; le o valor de energia
@@ -891,12 +916,17 @@ diminuir_energia:
   JMP sair_diminuir_energia
 
     gameover:
+      MOV R9, SOM_GAMEOVER
+      CALL tocar_media
+      CALL apagar_ecras
       MOV R3, JOGO_TERMINAR
       CALL alterar_estado_jogo ; altera o estado de jogo
       MOV R4, IMAGEM_GAMEOVER
       CALL mostra_imagem
 
+
   sair_diminuir_energia:
+    POP R9
     POP R7
     POP R6
     POP R4

@@ -37,12 +37,15 @@ AMARELO EQU 0FFF0H ; cor amarela
 NAO_MOVE EQU 0
 DISPARA_MISSIL EQU 5
 
-VELOCIDADE_NAVE EQU 1
-VELOCIDADE_MISSIL EQU 1
-ALCANCE_MISSIL EQU 6
+VELOCIDADE_NAVE EQU 1 ; velocidade da nave
+VELOCIDADE_MISSIL EQU 1 ; velocidade do missil
+ALCANCE_MISSIL EQU 6 ; linha limite do missil
 
-COR_NAVE EQU 0FFF0H
-COR_MISSIL EQU 0FF0FH
+COR_NAVE EQU 0FFF0H ; cor da nave
+COR_MISSIL EQU 0FF0FH ; cor do missil
+COR_ASTEROIDE EQU 0F0F0H ; cor do asteroide
+COR_NAVE_INIMIGA EQU 0FF00H ; cor nave inimiga
+COR_OVNI EQU 0F999H ; cor do ovni distante
 
 
 ENERGIA_DECREMENTO_TEMPO EQU 5 ; percentagem de diminuição de energia devido à passagem do tempo
@@ -73,10 +76,10 @@ INDICE_ENERGIA EQU 2 ; indice da interrupção responsavel pela energia na tabel
 
 FATOR_100 EQU 100
 
-ECRA_NAVE EQU 0
-ECRA_MISSIL EQU 1
-ECRA_OVNIS EQU 2
-ECRA_EXPLOSAO EQU 3
+ECRA_NAVE EQU 0 ; ecra da nave
+ECRA_MISSIL EQU 1 ; ecra do missil
+ECRA_OVNIS EQU 2 ; ecra dos ovnis
+ECRA_EXPLOSAO EQU 3 ; ecra da explosao
 
 VIDEO EQU 0
 SOM_MISSIL EQU 1
@@ -85,6 +88,25 @@ SOM_EXPLOSAO_NAVE EQU 3
 SOM_MINERACAO EQU 4
 SOM_GAMEOVER EQU 5
 MUSICA EQU 6
+
+OVNI_INDICE_TABELA_DESENHOS EQU 0
+OVNI_INDICE_DESENHO EQU 1
+OVNI_INDICE_COR EQU 2
+OVNI_INDICE_LINHA EQU 3
+OVNI_INDICE_COLUNA EQU 4
+OVNI_INDICE_ESTADO EQU 5
+OVNI_INDICE_TIPO EQU 6
+OVNI_INDICE_VEL_VERTICAL EQU 7
+OVNI_INDICE_VEL_LATERAL EQU 8
+OVNI_INDICE_ALTURA EQU 9
+OVNI_INDICE_LARGURA EQU 10
+
+OVNI_NUMERO_DESENHOS EQU 5
+OVNI_COLUNA_INICIAL EQU 29
+OVNI_LINHA_INICIAL EQU 0
+LINHAS_EVOLUCAO_OVNI EQU 3
+
+
 
 PLACE 2000H
 
@@ -103,30 +125,69 @@ missil_coordenadas:
   WORD 0 ; linha
   WORD 0 ; coluna
 
-missil_linha_limite: ; a linha limite do missil será igual à linha em que foi disparado menos o seu alance
-  WORD 0
 
+; Pixeis dos ovnis no tamanho 1 e 2
+pixeis_ovni_1:
+  string 1h, terminador
+pixeis_ovni_2:
+  string 3h, 3h, terminador
 
 ; ASTEROIDES
-asteroide_3:
-  string 2H, 7FH, 2FH, terminador
+pixeis_asteroide_3:
+  string 2H, 7H, 2H, terminador
 
-asteroide_4:
+pixeis_asteroide_4:
   string 6H, 0FH, 0FH, 6H, terminador
 
-asteroide_5:
+pixeis_asteroide_5:
   string 0EH, 1FH, 1FH, 1FH, 0EH, terminador
 
 
 ; NAVE INIMIGA
-nave_inimiga_3:
+pixeis_nave_inimiga_3:
   string 5H, 2H, 5H, terminador
 
-nave_inimiga_4:
+pixeis_nave_inimiga_4:
   string 9H, 6H, 6H, 9H, terminador
 
-nave_inimiga_5:
+pixeis_nave_inimiga_5:
   string 11H, 0AH, 4H, 0AH, 11H, terminador
+
+
+desenho_asteroide:
+  WORD pixeis_ovni_1
+  WORD pixeis_ovni_2
+  WORD pixeis_asteroide_3
+  WORD pixeis_asteroide_4
+  WORD pixeis_asteroide_5
+
+desenho_nave_inimiga:
+  WORD pixeis_ovni_1
+  WORD pixeis_ovni_2
+  WORD pixeis_nave_inimiga_3
+  WORD pixeis_nave_inimiga_4
+  WORD pixeis_nave_inimiga_5
+
+
+ovni_1:
+  WORD desenho_nave_inimiga ; tabela de desenhos do ovni
+  WORD pixeis_ovni_1 ; desenho atual do ovni
+  WORD COR_OVNI ; cor do ovni
+  WORD 0 ; linha
+  WORD 10 ; coluna
+  WORD 0 ; indica se está ativo ou inativo (0 = inativo, 1 = ativo)
+  WORD 0 ; indica se é asteroide ou nave inimaga (-1 = nave inimga, 1 = asteroide)
+  WORD 1 ; velocidade vertical
+  WORD 0 ; velocidade lateral
+  WORD 1 ; altura do ovni
+  WORD 1 ; largura do ovni
+
+
+
+
+
+
+
 
 ; EXPLOSAO
 explosao:
@@ -162,7 +223,8 @@ jogo: WORD JOGO_TERMINAR           ; estado do jogo (-1 = por começar, 0 = paus
 tecla_premida: WORD -1   ; tecla premida (-1 = nao houve tecla, (0-F) = tecla do teclado )
 ultima_tecla: WORD -1 ; ultima tecla premida (-1 = nao houve tecla, (0-F) = tecla do teclado )
 energia: WORD ENERGIA_INICIAL  ; energia da nave
-estado_missil: WORD 0 ; indica se o missil está ativo ou não
+estado_missil: WORD 0 ; indica se o missil está ativo ou não (0 = inativo, 1 = ativo)
+contador_aleatorio: WORD 0 ; contador que permite gerar um número pseudo-aleatório
 
 
 
@@ -208,21 +270,24 @@ inicio:
   CALL mostra_imagem ; mostra a imagem inicial
   MOV R4, 0
 
-
   ; permitir interrupções
   EI0
-	EI1
+  EI1
   EI2
-	EI
+  EI
 
 
-; ciclo principal do programa
+
+
+; ciclo principal do programa onde estão os processos cooperativos
 ciclo:
 
   CALL teclado
   CALL nave
+  CALL ovni
   CALL missil
   CALL controlo
+  CALL gerador
 
   JMP ciclo
 
@@ -281,13 +346,13 @@ teclado:
     MOV R0, tecla_premida			; Obt�m endere�o da mem�ria onde a tecla est� guardada
     MOV [R0], R5			; Guarda nova tecla na vari�vel global tecla_premida
 
-  POP R6	; Repoe registos usados
+  POP R6
   POP R5
   POP R3
   POP R2
   POP R1
   POP R0
-  RET		; Retorna
+  RET
 
 
 
@@ -408,6 +473,388 @@ atender_evento_energia:
 
 
 
+
+ovni:
+  PUSH R0
+  PUSH R1
+  PUSH R2
+  PUSH R3
+  PUSH R4
+  PUSH R5
+  PUSH R6
+  PUSH R7
+  PUSH R8
+  PUSH R9
+  PUSH R10
+  PUSH R11
+
+  MOV R1, jogo        ; base da tabela jogo
+  MOV R1, [R1]        ; le o estado do jogo
+  CMP R1, 1           ; se o jogo nao estiver a correr saimos
+  JNZ sair_ovni
+
+  MOV R1, ECRA_OVNIS
+  CALL seleciona_ecra ; seleciona o ecra
+
+
+
+  MOV R0, tabela_eventos ; Obt�m o endere�o da mem�ria onde os eventos estão guardados
+  MOV R1, INDICE_OVNIS
+  SHL R1, 1 ; multiplicar o indice por 2 porque estamos a aceder a uma tabela de words
+  MOV R2, [R0 + R1] ; le o valor da flag correspondente ao missil
+  CMP R2, 0 ; se estiver a 0 saimos
+  JZ sair_ovni
+
+  MOV R2, 0
+  MOV [R0 + R1], R2 ; se nao estiver a 0, alteramos o valor para 0
+
+  MOV R0, ovni_1 ; Obt�m o endere�o da mem�ria onde o ovni está guardado
+  MOV R1, OVNI_INDICE_ESTADO
+  SHL R1, 1 ; multiplicar o indice por dois porque estamos a aceder a uma tabela de words
+  MOV R2, [R0 + R1] ; obtem o estado do ovni (inativo ou ativo)
+  CMP R2, 0 ; se estiver inativo então temos que ativar o ovni e gerar valores para a velocidade e tipo do ovni
+  JZ ativa
+
+
+  CALL movimenta_ovni
+  CALL evolucao_ovni
+  CALL desenha_ovni
+  JMP sair_ovni
+
+  ativa:
+    CALL ativa_ovni
+    CALL reseta_ovni
+    CALL gerar_ovni
+
+  sair_ovni:
+    POP R11
+    POP R10
+    POP R9
+    POP R8
+    POP R7
+    POP R6
+    POP R5
+    POP R4
+    POP R3
+    POP R2
+    POP R1
+    POP R0
+    RET
+
+
+
+; **********************************************************************
+; MOVIMENTA_OVNI- Movimenta um determinado ovni
+;
+; Argumentos:   R0 - base da tabela do ovni
+;
+; **********************************************************************
+movimenta_ovni:
+  PUSH R2
+  PUSH R3
+  PUSH R6
+  PUSH R7
+  PUSH R8
+  PUSH R9
+
+  ; guardar em registos os indices correspondentes aos dados do ovni
+  MOV R6, OVNI_INDICE_VEL_LATERAL
+  SHL R6, 1
+  MOV R7, OVNI_INDICE_VEL_VERTICAL
+  SHL R7, 1
+  MOV R8, OVNI_INDICE_COLUNA
+  SHL R8, 1
+  MOV R9, OVNI_INDICE_LINHA
+  SHL R9, 1
+
+
+  ; movimento lateral
+  MOV R2, [R0 + R6] ; obter o valor da velocidade lateral
+  MOV R3, [R0 + R8] ; obter a coluna em que se situa o ovni
+
+  ADD R2, R3 ; adicionar à coluna o valor da velocidade
+  MOV [R0 + R8], R2 ; guardar o valor obtido na memoria, movendo assim o ovni lateralmente
+
+  ; movimento vertical
+  MOV R2, [R0 + R7] ; obter o valor da velocidade lateral
+  MOV R3, [R0 + R9] ; obter a linha em que se situa o ovni
+
+  ADD R2, R3 ; adicionar à linha o valor da velocidade
+  MOV [R0 + R9], R2 ; guardar o valor obtido na memoria, movendo assim o ovni verticalmente
+
+  POP R9
+  POP R8
+  POP R7
+  POP R6
+  POP R3
+  POP R2
+
+  RET
+
+
+; **********************************************************************
+; EVOLUCAO_OVNI-  Trata da evolucao de um determinado ovni
+;
+; Argumentos:   R0 - base da tabela do ovni
+;
+; **********************************************************************
+evolucao_ovni:
+  PUSH R1
+  PUSH R2
+  PUSH R3
+  PUSH R4
+  PUSH R6
+
+  MOV R9, OVNI_INDICE_LINHA
+  SHL R9, 1
+  MOV R1, [R0 + R9] ; obter a linha em que se situa o ovni
+  MOV R3, R1 ; variavel auxiliar com o valor da linha do ovni
+  MOV R2, LINHAS_EVOLUCAO_OVNI
+  MOD R1, R2 ; se a divisao inteira da linha atual pelo numero de linhas que leva o ovni a evoluir for 0 entao passamos ao proximo desenho
+  JZ proximo_desenho
+  JMP sair_evolucao_ovni
+
+    proximo_desenho:
+      MOV R4, OVNI_INDICE_DESENHO
+      SHL R4, 1
+      MOV R7, OVNI_INDICE_LARGURA
+      SHL R7, 1
+      MOV R8, OVNI_INDICE_ALTURA
+      SHL R8, 1
+
+      DIV R3, R2 ; obter o numero do proximo desenho
+      MOV R6, R3 ; variavel auxiliar com o numero do proximo desenho
+      CMP R3, OVNI_NUMERO_DESENHOS
+      JGE sair_evolucao_ovni ; se já estamos no ultimo desenho então saltamos
+      SHL R3, 1 ; multiplicar por dois porque vamos aceder a uma tabela de words
+      MOV R1, [R0] ; obter a tabela de desenhos do ovni
+      MOV R2, [R1 + R3] ; obter o proximo desenho
+      MOV [R0 + R4], R2 ;  modificar o desenho atual pelo seguinte
+      MOV R9, [R0 + R7] ; obter a largura atual
+      ADD R9, 1 ; incrementar a largura
+      MOV [R0 + R7], R9 ; guardar o valor na memoria
+      MOV R9, [R0 + R8] ; obter a altura atual
+      ADD R9, 1 ; incrementar a altura
+      MOV [R0 + R8], R9 ; guardar o valor na memoria
+      CMP R6, 2 ; quando deixa de ser um ovni e passa a ser um asteroide ou nave inimiga, mudamos a cor
+      JZ mudar_cor
+      JMP sair_evolucao_ovni
+
+        mudar_cor: ; mudar a propriedade da cor do ovni consoante o seu tipo
+          MOV R4, OVNI_INDICE_COR
+          SHL R4, 1
+          MOV R1, OVNI_INDICE_TIPO
+          SHL R1, 1
+          MOV R2, [R0 + R1]
+          CMP R2, -1
+          JZ nave_inimiga
+          MOV R6, COR_ASTEROIDE
+          MOV [R0 + R4], R6
+          JMP sair_evolucao_ovni
+
+            nave_inimiga:
+              MOV R6, COR_NAVE_INIMIGA
+              MOV [R0 + R4], R6
+
+  sair_evolucao_ovni:
+    POP R6
+    POP R4
+    POP R3
+    POP R2
+    POP R1
+    RET
+
+
+
+
+; **********************************************************************
+; DESENHA_OVNI-  Desenha um determinado ovni
+;
+; Argumentos:   R0 - base da tabela do ovni
+;
+; **********************************************************************
+  desenha_ovni:
+    PUSH R1
+    PUSH R3
+    PUSH R4
+    PUSH R5
+    PUSH R6
+    PUSH R8
+    PUSH R9
+    PUSH R10
+    PUSH R11
+
+    ; guardar em registos os indices correspondentes aos dados do ovni
+    MOV R5, OVNI_INDICE_DESENHO
+    SHL R5, 1
+    MOV R8, OVNI_INDICE_COLUNA
+    SHL R8, 1
+    MOV R9, OVNI_INDICE_LINHA
+    SHL R9, 1
+    MOV R10, OVNI_INDICE_LARGURA
+    SHL R10, 1
+
+    MOV R1, ECRA_OVNIS
+    CALL seleciona_ecra
+    CALL apagar_ecra
+
+    MOV R4, OVNI_INDICE_COR
+    SHL R4, 1
+    MOV R6, [R0 + R4]
+    CALL alterar_cor_caneta
+
+    MOV R0, ovni_1 ; Obt�m o endere�o da mem�ria onde o ovni está guardado
+    MOV R3, [R0 + R9]         ; coordenada Y
+    MOV R4, [R0 + R8]      ; coordenada X
+    MOV R1, [R0 + R5]
+    MOV R11, [R0 + R10]   ; largura do ovni
+    CALL desenha_objeto ; desenhar objeto
+
+    POP R11
+    POP R10
+    POP R9
+    POP R8
+    POP R6
+    POP R5
+    POP R4
+    POP R3
+    POP R1
+    RET
+
+
+; **********************************************************************
+; ATIVA_OVNI-  Ativa um determinado ovni
+;
+; Argumentos:   R0 - base da tabela do ovni
+;
+; **********************************************************************
+ativa_ovni:
+  PUSH R1
+  PUSH R2
+
+  MOV R1, OVNI_INDICE_ESTADO
+  SHL R1, 1
+  MOV R2, 1
+  MOV [R0 + R1], R2 ; mudar o estado do ovni para ativo
+
+  POP R2
+  POP R1
+  RET
+
+
+; **********************************************************************
+; RESETA_OVNI-  reseta os valores do ovni para os originais
+;
+; Argumentos:   R0 - base da tabela do ovni
+;
+; **********************************************************************
+reseta_ovni:
+  PUSH R1
+  PUSH R2
+
+  ; LINHA
+  MOV R1, OVNI_INDICE_LINHA
+  SHL R1, 1
+  MOV R2, OVNI_LINHA_INICIAL
+  MOV [R0 + R1], R2
+
+  ; COLUNA
+  MOV R1, OVNI_INDICE_COLUNA
+  SHL R1, 1
+  MOV R2, OVNI_COLUNA_INICIAL
+  MOV [R0 + R1], R2
+
+  ; LARGURA
+  MOV R1, OVNI_INDICE_LARGURA
+  SHL R1, 1
+  MOV R2, 1
+  MOV [R0 + R1], R2
+
+  ; ALTURA
+  MOV R1, OVNI_INDICE_ALTURA
+  SHL R1, 1
+  MOV R2, 1
+  MOV [R0 + R1], R2
+
+  ; DESENHO
+  MOV R1, OVNI_INDICE_DESENHO
+  SHL R1, 1
+  MOV R2, pixeis_ovni_1
+  MOV [R0 + R1], R2
+
+  ; COR
+  MOV R1, OVNI_INDICE_COR
+  SHL R1, 1
+  MOV R2, COR_OVNI
+  MOV [R0 + R1], R2
+
+  POP R2
+  POP R1
+  RET
+
+; **********************************************************************
+; resta_ovni-  reseta os valores do ovni para os originais
+;
+; Argumentos:   R0 - base da tabela do ovni
+;
+; **********************************************************************
+gerar_ovni:
+  PUSH R1
+  PUSH R2
+  PUSH R3
+  PUSH R4
+  PUSH R5
+  PUSH R6
+  PUSH R7
+  PUSH R8
+
+  MOV R5, OVNI_INDICE_TIPO
+  SHL R5, 1
+  MOV R7, OVNI_INDICE_TABELA_DESENHOS
+  SHL R7, 1
+
+  MOV R1, contador_aleatorio
+  MOV R1, [R1] ; ler o valor do contador
+  MOV R2, R1
+  MOV R3, 3
+  MOD R2, R3 ; obter um numero entre 0 e 2
+  SUB R2, 1 ; subtrair 1 para obter um numero entre -1 e 1
+
+  MOV R4, OVNI_INDICE_VEL_LATERAL
+  SHL R4, 1
+  MOV [R0 + R4], R2 ; guardar o valor obtido na velocidade lateral do asteroide
+
+  MOV R3, 4
+  MOD R1, R3 ; obter um numero entre 0 e 3
+  JZ asteroide ; se for 0 então o ovni será um asteroide, caso contrário será uma nave inimiga
+  MOV R6, -1
+  MOV [R0 + R5], R6 ; defenir o tipo do ovni como nave_inimiga (-1)
+
+  MOV R8, desenho_nave_inimiga
+  MOV [R0 + R7], R8 ; definir a tabela de desenhos do ovni com os desenhos da nave inimiga
+  JMP sair_gerar_asteroide
+
+    asteroide:
+      MOV R6, 1
+      MOV [R0 + R5], R6 ; defenir o tipo do ovni como asteroide (1)
+
+      MOV R8, desenho_asteroide
+      MOV [R0 + R7], R8 ; definir a tabela de desenhos do ovni com os desenhos do asteroide
+
+sair_gerar_asteroide:
+  POP R8
+  POP R7
+  POP R6
+  POP R5
+  POP R4
+  POP R3
+  POP R2
+  POP R1
+  RET
+
+
+
+
 missil:
   PUSH R0
   PUSH R1
@@ -483,11 +930,6 @@ missil:
     POP R1
     POP R0
     RET
-
-
-
-
-
 
 
 controlo:
@@ -571,6 +1013,31 @@ controlo:
 
 
 
+gerador:
+  PUSH R0
+  PUSH R1
+
+  MOV R0, contador_aleatorio  ; Obtem a base da tabela do contador
+  MOV R1, [R0]
+  ADD R1, 1 ; incrementa em 1 o contador
+  MOV [R0], R1 ; guarda o valor na memoria
+
+  POP R0
+  POP R1
+  RET
+
+  RET
+
+
+
+
+
+
+
+
+
+
+
 
 desenha_nave:
   PUSH R1
@@ -619,7 +1086,7 @@ inicializar:
   PUSH R1
   PUSH R2
   MOV R1, energia  ; base da tabela da energia
-  MOV R2, ENERGIA_INICIAL ; inicializa r2 com a energia inicial
+  MOV R2, ENERGIA_INICIAL ; inicializa r2 com a energia inicial da nave
   MOV [R1], R2 ; guarda o valor na memoria
   CALL apagar_imagem ; apagar qualquer imagem do mediacenter
   POP R2
@@ -717,6 +1184,11 @@ alterar_cor_caneta:
   MOV  R0, COR_CANETA
   MOV  [R0], R6          ; altera a cor da caneta
   RET
+
+
+
+
+
 
 
 ; **********************************************************************
@@ -916,6 +1388,7 @@ diminuir_energia:
   JMP sair_diminuir_energia
 
     gameover:
+      CALL pausa_media
       MOV R9, SOM_GAMEOVER
       CALL tocar_media
       CALL apagar_ecras

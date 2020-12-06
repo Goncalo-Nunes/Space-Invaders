@@ -46,6 +46,7 @@ COR_MISSIL EQU 0FF0FH ; cor do missil
 COR_ASTEROIDE EQU 0F0F0H ; cor do asteroide
 COR_NAVE_INIMIGA EQU 0FF00H ; cor nave inimiga
 COR_OVNI EQU 0F999H ; cor do ovni distante
+COR_EXPLOSAO EQU 0F0DFH ; cor da explosao
 
 
 ENERGIA_DECREMENTO_TEMPO EQU 5 ; percentagem de diminuição de energia devido à passagem do tempo
@@ -170,11 +171,11 @@ desenho_nave_inimiga:
 
 
 ovni_1:
-  WORD desenho_nave_inimiga ; tabela de desenhos do ovni
-  WORD pixeis_ovni_1 ; desenho atual do ovni
+  WORD 0 ; tabela de desenhos do ovni
+  WORD 0 ; desenho atual do ovni
   WORD COR_OVNI ; cor do ovni
   WORD 0 ; linha
-  WORD 10 ; coluna
+  WORD 0 ; coluna
   WORD 0 ; indica se está ativo ou inativo (0 = inativo, 1 = ativo)
   WORD 0 ; indica se é asteroide ou nave inimaga (-1 = nave inimga, 1 = asteroide)
   WORD 1 ; velocidade vertical
@@ -496,8 +497,6 @@ ovni:
   MOV R1, ECRA_OVNIS
   CALL seleciona_ecra ; seleciona o ecra
 
-
-
   MOV R0, tabela_eventos ; Obt�m o endere�o da mem�ria onde os eventos estão guardados
   MOV R1, INDICE_OVNIS
   SHL R1, 1 ; multiplicar o indice por 2 porque estamos a aceder a uma tabela de words
@@ -519,10 +518,13 @@ ovni:
   CALL movimenta_ovni
   CALL evolucao_ovni
   CALL desenha_ovni
+  CALL deteta_colisao_ovni
+
   JMP sair_ovni
 
   ativa:
-    CALL ativa_ovni
+    MOV R2, 1
+    CALL alterar_estado_ovni
     CALL reseta_ovni
     CALL gerar_ovni
 
@@ -610,6 +612,7 @@ evolucao_ovni:
   MOV R1, [R0 + R9] ; obter a linha em que se situa o ovni
   MOV R3, R1 ; variavel auxiliar com o valor da linha do ovni
   MOV R2, LINHAS_EVOLUCAO_OVNI
+  ADD R2, 1
   MOD R1, R2 ; se a divisao inteira da linha atual pelo numero de linhas que leva o ovni a evoluir for 0 entao passamos ao proximo desenho
   JZ proximo_desenho
   JMP sair_evolucao_ovni
@@ -726,16 +729,16 @@ evolucao_ovni:
 ; ATIVA_OVNI-  Ativa um determinado ovni
 ;
 ; Argumentos:   R0 - base da tabela do ovni
+;               R2 - Estado do ovni
 ;
 ; **********************************************************************
-ativa_ovni:
+alterar_estado_ovni:
   PUSH R1
   PUSH R2
 
   MOV R1, OVNI_INDICE_ESTADO
   SHL R1, 1
-  MOV R2, 1
-  MOV [R0 + R1], R2 ; mudar o estado do ovni para ativo
+  MOV [R0 + R1], R2 ; mudar o estado do ovni
 
   POP R2
   POP R1
@@ -793,7 +796,7 @@ reseta_ovni:
   RET
 
 ; **********************************************************************
-; resta_ovni-  reseta os valores do ovni para os originais
+; gerar_ovni-  reseta os valores do ovni para os originais
 ;
 ; Argumentos:   R0 - base da tabela do ovni
 ;
@@ -853,6 +856,230 @@ sair_gerar_asteroide:
   RET
 
 
+; **********************************************************************
+; deteta_colisao_ovni-  deteta colisoes com outros objetos e deteta a saida do ecra
+;
+; Argumentos:   R0 - base da tabela do ovni
+;
+; **********************************************************************
+deteta_colisao_ovni:
+  CALL verifica_limites_ovni
+  CALL verifica_colisao_missil
+  CALL verifica_colisao_nave
+  RET
+
+
+
+; **********************************************************************
+; verifica_limites_ovni-  verifica se o ovni saiu dos limites do ecra
+;
+; Argumentos:   R0 - base da tabela do ovni
+;
+; **********************************************************************
+verifica_limites_ovni:
+  PUSH R1
+  PUSH R2
+  PUSH R3
+
+
+  MOV R1, OVNI_INDICE_LINHA
+  SHL R1, 1
+  MOV R2, [R0 + R1] ; obter linha do ovni
+  MOV R3, LIN_MAX
+  CMP R2, R3
+  JLT sair_verifica_limites_ovni
+  MOV R2, 0
+  CALL alterar_estado_ovni ; altera o estado do ovni para 0
+
+  sair_verifica_limites_ovni:
+  POP R3
+  POP R2
+  POP R1
+  RET
+
+
+; **********************************************************************
+; verifica_colisao_missil-  verifica se o missil colidiu com  o ovni
+;
+; Argumentos:   R0 - base da tabela do ovni
+;
+; **********************************************************************
+verifica_colisao_missil:
+  PUSH R1
+  PUSH R2
+  PUSH R3
+  PUSH R4
+  PUSH R5
+  PUSH R6
+  PUSH R7
+  PUSH R8
+  PUSH R11
+
+  MOV R1, ECRA_EXPLOSAO
+  CALL apagar_ecra
+
+  MOV R1, estado_missil
+  MOV R1, [R1]
+  CMP R1, 0 ; verificar se o missil está ativado ou nao
+  JZ sair_verifica_colisao_missil ; se nao estiver saimos
+
+  MOV R1, OVNI_INDICE_LINHA
+  SHL R1, 1
+  MOV R2, [R0 + R1] ; obter a linha superior do ovni
+  MOV R1, OVNI_INDICE_COLUNA
+  SHL R1, 1
+  MOV R3, [R0 + R1] ; obter a coluna do lado esquerdo esquerdo do ovni
+  MOV R1, OVNI_INDICE_ALTURA
+  SHL R1, 1
+  MOV R4, [R0 + R1] ; obter a altura do ovni
+  MOV R5, R4 ; variavel auxiliar com o valor da altura do ovni
+  MOV R6, missil_coordenadas
+  MOV R7, [R6] ; obter a linha do missil
+  MOV R8, [R6 + 2] ; obter a coluna do missil
+
+  MOV R1, OVNI_INDICE_LARGURA
+  SHL R1, 1
+  MOV R1, [R0 + R1] ; obter a altura do ovni
+  ADD R1, R3
+
+  ADD R5, R2 ; adicionar a largura e a linha do ovni para obter a linha inferior
+  CMP R7, R5
+  JGT sair_verifica_colisao_missil
+  CMP R7, R2
+  JLT sair_verifica_colisao_missil
+  CMP R3, R8
+  JGT sair_verifica_colisao_missil
+  CMP R1, R8
+  JLT sair_verifica_colisao_missil
+
+  MOV R1, OVNI_INDICE_TIPO
+  SHL R1, 1
+  MOV R3, [R0 + R1] ; obter o tipo do ovni
+  CMP R3, -1 ; verifica o tipo do ovni que colidiu com a nave
+  JZ missil_colidiu_nave_inimiga
+  JMP explode_ovni
+
+  missil_colidiu_nave_inimiga:
+    MOV R5, ENERGIA_INCREMENTO_EXPLOSAO
+    CALL aumentar_energia
+
+  explode_ovni:
+
+    MOV R9, SOM_EXPLOSAO_INIMIGO
+    CALL tocar_media
+    CALL desativar_missil ; desativa o missil
+    MOV R2, 0
+    CALL alterar_estado_ovni
+
+    MOV R1, ECRA_OVNIS
+    CALL apagar_ecra
+
+    MOV R1, ECRA_EXPLOSAO
+    CALL seleciona_ecra ; seleciona o ecra
+    MOV R6, COR_EXPLOSAO
+    CALL alterar_cor_caneta
+
+    MOV R1, OVNI_INDICE_LINHA
+    SHL R1, 1
+    MOV R3, [R0 + R1] ; coordenada Y
+    MOV R1, OVNI_INDICE_COLUNA
+    SHL R1, 1
+    MOV R4, [R0 + R1] ; coordenada X
+
+    MOV R1, explosao
+    MOV R11, 5  ; largura do ovni
+    CALL desenha_objeto ; desenhar objeto
+
+  sair_verifica_colisao_missil:
+    POP R11
+    POP R8
+    POP R7
+    POP R6
+    POP R5
+    POP R4
+    POP R3
+    POP R2
+    POP R1
+    RET
+
+
+verifica_colisao_nave:
+  PUSH R1
+  PUSH R2
+  PUSH R3
+  PUSH R4
+  PUSH R5
+  PUSH R6
+  PUSH R7
+  PUSH R8
+  PUSH R9
+
+  MOV R1, OVNI_INDICE_LINHA
+  SHL R1, 1
+  MOV R2, [R0 + R1] ; obter a linha superior do ovni
+  MOV R1, OVNI_INDICE_COLUNA
+  SHL R1, 1
+  MOV R3, [R0 + R1] ; obter a coluna do lado esquerdo esquerdo do ovni
+  MOV R1, OVNI_INDICE_ALTURA
+  SHL R1, 1
+  MOV R4, [R0 + R1] ; obter a altura do ovni
+  MOV R5, R4 ; variavel auxiliar com o valor da altura do ovni
+  MOV R6, nave_coordenadas
+  MOV R7, [R6] ; obter a linha da nave
+  MOV R8, [R6 + 2] ; obter a coluna da nave
+  MOV R9, LARGURA_NAVE
+  ADD R9, R8
+  MOV R1, OVNI_INDICE_LARGURA
+  SHL R1, 1
+  MOV R1, [R0 + R1] ; obter a altura do ovni
+  ADD R1, R3
+
+  ADD R5, R2 ;adicionar a largura e a linha do ovni para obter a linha inferior
+  CMP R7, R5
+  JGT sair_verifica_colisao_nave
+  CMP R3, R9
+  JGT sair_verifica_colisao_nave
+  CMP R1, R8
+  JLT sair_verifica_colisao_nave
+
+  MOV R1, OVNI_INDICE_TIPO
+  SHL R1, 1
+  MOV R3, [R0 + R1] ; obter o tipo do ovni
+
+  MOV R2, 0
+  CALL alterar_estado_ovni ; altera o estado do ovni para 0
+
+  CMP R3, 1 ; verifica o tipo do ovni que colidiu com a nave
+  JZ nave_colidiu_asteroide
+
+  ; este codigo só executa se colidimos com uma nave inimiga
+  MOV R9, SOM_EXPLOSAO_NAVE
+  MOV R4, IMAGEM_EXPLOSAO
+  CALL gameover
+  CALL apagar_ecras
+  JMP sair_verifica_colisao_nave
+
+  nave_colidiu_asteroide:
+    MOV R5, ENERGIA_INCREMENTO_MINERACAO
+    CALL aumentar_energia
+    MOV R9, SOM_MINERACAO
+    CALL tocar_media
+
+  sair_verifica_colisao_nave:
+    POP R9
+    POP R8
+    POP R7
+    POP R6
+    POP R5
+    POP R4
+    POP R3
+    POP R2
+    POP R1
+    RET
+
+
+
+
 
 
 missil:
@@ -910,15 +1137,8 @@ missil:
     CALL desenha_pixel
     JMP sair_missil
 
-
   missil_desativar:
-    MOV R1, ECRA_MISSIL
-    CALL seleciona_ecra ; seleciona o ecra do missil
-
-    MOV R4, estado_missil ; Obt�m o endere�o da mem�ria onde o estado do missil está guardado
-    MOV R5, 0
-    MOV [R4], R5 ; altera o estado do missil para 0 (inativo)
-    CALL apagar_ecra ; apaga o ecra do missil para dar lugar ao missil desenhado na nova posicao
+    CALL desativar_missil
 
   sair_missil:
     POP R9
@@ -1033,9 +1253,44 @@ gerador:
 
 
 
+desativar_missil:
+  PUSH R1
+  PUSH R4
+  PUSH R5
+  MOV R1, ECRA_MISSIL
+  CALL seleciona_ecra ; seleciona o ecra do missil
+
+  MOV R4, estado_missil ; Obt�m o endere�o da mem�ria onde o estado do missil está guardado
+  MOV R5, 0
+  MOV [R4], R5 ; altera o estado do missil para 0 (inativo)
+  CALL apagar_ecra ; apaga o ecra do missil para dar lugar ao missil desenhado na nova posicao
+  POP R5
+  POP R4
+  POP R1
+  RET
+
+
+; **********************************************************************
+; desenha_explosao  desenha a explosao na posicao do ovni
+;
+; Argumentos:   R0 - base da tabela do ovni
+;
+; **********************************************************************
+desenha_explosao:
+  PUSH R1
+  PUSH R3
+  PUSH R4
+  PUSH R6
+  PUSH R11
 
 
 
+  POP R11
+  POP R6
+  POP R4
+  POP R3
+  POP R1
+  RET
 
 
 
@@ -1181,8 +1436,10 @@ apagar_imagem:
 ;
 ; **********************************************************************
 alterar_cor_caneta:
+  PUSH R0
   MOV  R0, COR_CANETA
   MOV  [R0], R6          ; altera a cor da caneta
+  POP R0
   RET
 
 
@@ -1353,6 +1610,47 @@ desenha_pixel:
         RET
 
 
+; **********************************************************************
+; AUMENTAR_ENERGIA- Aumenta a energia de acordo com a percentagem da
+;                   energia inicial especificada
+;
+; Argumento:   R5 - percentagem do valor inicial a aumentar
+;
+; **********************************************************************
+aumentar_energia:
+  PUSH R1
+  PUSH R2
+  PUSH R3
+  PUSH R5
+  PUSH R6
+  PUSH R7
+
+
+  MOV R1, energia  ; base da tabela da energia
+  MOV R2, [R1] ; le o valor de energia
+
+  MOV R6, ENERGIA_INICIAL
+  MOV R7, FATOR_100
+  MUL R6, R5 ; multiplicar a energia inicial pelo valor de diminuição
+  DIV R6, R7 ; dividir o resultado por 100
+
+  ADD R2, R6; diminui a energia
+  MOV R3, ENERGIA_INICIAL
+  CMP R2, R3
+  JGE sair_aumentar_energia ; se a energia já estiver no maximo nao aumentamos e saimos da rotina
+
+  MOV [R1], R2 ; guarda o novo valor na memoria
+  CALL atualiza_display ; atualiza os displays com o novo valor da energia
+
+  sair_aumentar_energia:
+    POP R7
+    POP R6
+    POP R5
+    POP R3
+    POP R2
+    POP R1
+    RET
+
 
 ; **********************************************************************
 ; DIMINUIR_ENERGIA- Diminui a energia de acordo com a percentagem da
@@ -1384,18 +1682,13 @@ diminuir_energia:
   MOV [R1], R2 ; guarda o novo valor na memoria
   CALL atualiza_display ; atualiza os displays com o novo valor da energia
   CMP R2, 0 ; se o valor da energia for 0 então perdemos o jogo
-  JZ gameover
+  JZ diminuir_energia_gameover
   JMP sair_diminuir_energia
 
-    gameover:
-      CALL pausa_media
-      MOV R9, SOM_GAMEOVER
-      CALL tocar_media
-      CALL apagar_ecras
-      MOV R3, JOGO_TERMINAR
-      CALL alterar_estado_jogo ; altera o estado de jogo
-      MOV R4, IMAGEM_GAMEOVER
-      CALL mostra_imagem
+    diminuir_energia_gameover:
+    MOV R9, SOM_GAMEOVER
+    MOV R4, IMAGEM_GAMEOVER
+    CALL gameover
 
 
   sair_diminuir_energia:
@@ -1476,10 +1769,23 @@ apagar_ecras:
 
 
 
-
-
-
-
+; **********************************************************************
+; gameover - trata de quando o jogador perde o jogo
+;
+; Argumento:   R9 - som a tocar
+;              R4 - imagem a mostrar
+;
+; **********************************************************************
+gameover:
+  PUSH R3
+  CALL pausa_media
+  CALL tocar_media
+  CALL apagar_ecras
+  MOV R3, JOGO_TERMINAR
+  CALL alterar_estado_jogo ; altera o estado de jogo
+  CALL mostra_imagem
+  POP R3
+  RET
 
 
 

@@ -79,8 +79,7 @@ FATOR_100 EQU 100
 
 ECRA_NAVE EQU 0 ; ecra da nave
 ECRA_MISSIL EQU 1 ; ecra do missil
-ECRA_OVNIS EQU 2 ; ecra dos ovnis
-ECRA_EXPLOSAO EQU 3 ; ecra da explosao
+ECRA_EXPLOSAO EQU 2 ; ecra da explosao
 
 VIDEO EQU 0
 SOM_MISSIL EQU 1
@@ -101,12 +100,13 @@ OVNI_INDICE_VEL_VERTICAL EQU 7
 OVNI_INDICE_VEL_LATERAL EQU 8
 OVNI_INDICE_ALTURA EQU 9
 OVNI_INDICE_LARGURA EQU 10
+OVNI_INDICE_ECRA EQU 11
 
 OVNI_NUMERO_DESENHOS EQU 5
 OVNI_COLUNA_INICIAL EQU 29
 OVNI_LINHA_INICIAL EQU 0
 LINHAS_EVOLUCAO_OVNI EQU 3
-
+NUMERO_OVNIS EQU 3
 
 
 PLACE 2000H
@@ -182,6 +182,41 @@ ovni_1:
   WORD 0 ; velocidade lateral
   WORD 1 ; altura do ovni
   WORD 1 ; largura do ovni
+  WORD 3 ; ecra do onvi
+
+ovni_2:
+  WORD 0 ; tabela de desenhos do ovni
+  WORD 0 ; desenho atual do ovni
+  WORD COR_OVNI ; cor do ovni
+  WORD 0 ; linha
+  WORD 0 ; coluna
+  WORD 0 ; indica se está ativo ou inativo (0 = inativo, 1 = ativo)
+  WORD 0 ; indica se é asteroide ou nave inimaga (-1 = nave inimga, 1 = asteroide)
+  WORD 1 ; velocidade vertical
+  WORD 0 ; velocidade lateral
+  WORD 1 ; altura do ovni
+  WORD 1 ; largura do ovni
+  word 4 ; ecra do onvi
+
+ovni_3:
+  WORD 0 ; tabela de desenhos do ovni
+  WORD 0 ; desenho atual do ovni
+  WORD COR_OVNI ; cor do ovni
+  WORD 0 ; linha
+  WORD 0 ; coluna
+  WORD 0 ; indica se está ativo ou inativo (0 = inativo, 1 = ativo)
+  WORD 0 ; indica se é asteroide ou nave inimaga (-1 = nave inimga, 1 = asteroide)
+  WORD 1 ; velocidade vertical
+  WORD 0 ; velocidade lateral
+  WORD 1 ; altura do ovni
+  WORD 1 ; largura do ovni
+  WORD 5 ; ecra do ovni
+
+ovnis:
+  WORD ovni_1
+  WORD ovni_2
+  WORD ovni_3
+
 
 
 
@@ -494,39 +529,48 @@ ovni:
   CMP R1, 1           ; se o jogo nao estiver a correr saimos
   JNZ sair_ovni
 
-  MOV R1, ECRA_OVNIS
-  CALL seleciona_ecra ; seleciona o ecra
 
   MOV R0, tabela_eventos ; Obt�m o endere�o da mem�ria onde os eventos estão guardados
   MOV R1, INDICE_OVNIS
   SHL R1, 1 ; multiplicar o indice por 2 porque estamos a aceder a uma tabela de words
-  MOV R2, [R0 + R1] ; le o valor da flag correspondente ao missil
+  MOV R2, [R0 + R1] ; le o valor da flag correspondente ao ovni
   CMP R2, 0 ; se estiver a 0 saimos
   JZ sair_ovni
 
   MOV R2, 0
   MOV [R0 + R1], R2 ; se nao estiver a 0, alteramos o valor para 0
 
-  MOV R0, ovni_1 ; Obt�m o endere�o da mem�ria onde o ovni está guardado
-  MOV R1, OVNI_INDICE_ESTADO
-  SHL R1, 1 ; multiplicar o indice por dois porque estamos a aceder a uma tabela de words
-  MOV R2, [R0 + R1] ; obtem o estado do ovni (inativo ou ativo)
-  CMP R2, 0 ; se estiver inativo então temos que ativar o ovni e gerar valores para a velocidade e tipo do ovni
-  JZ ativa
-
-
-  CALL movimenta_ovni
-  CALL evolucao_ovni
-  CALL desenha_ovni
-  CALL deteta_colisao_ovni
-
-  JMP sair_ovni
+  MOV R11, ovnis
+  MOV R3, 0
+  MOV R4, NUMERO_OVNIS
+  SHL R4, 1
+  ciclo_ovnis:
+    CALL gerador
+    MOV R0, [R11 + R3]
+    ADD R3, 2
+    CMP R3, R4
+    JGT sair_ovni
+    MOV R5, OVNI_INDICE_ECRA
+    SHL R5, 1
+    MOV R1, [R10 + R5]
+    CALL seleciona_ecra
+    MOV R5, OVNI_INDICE_ESTADO
+    SHL R5, 1 ; multiplicar o indice por dois porque estamos a aceder a uma tabela de words
+    MOV R2, [R0 + R5] ; obtem o estado do ovni (inativo ou ativo)
+    CMP R2, 0 ; se estiver inativo então temos que ativar o ovni e gerar valores para a velocidade e tipo do ovni
+    JZ ativa
+    CALL movimenta_ovni
+    CALL evolucao_ovni
+    CALL desenha_ovni
+    CALL deteta_colisao_ovni
+    JMP ciclo_ovnis
 
   ativa:
     MOV R2, 1
     CALL alterar_estado_ovni
     CALL reseta_ovni
     CALL gerar_ovni
+    JMP ciclo_ovnis
 
   sair_ovni:
     POP R11
@@ -697,8 +741,9 @@ evolucao_ovni:
     MOV R10, OVNI_INDICE_LARGURA
     SHL R10, 1
 
-    MOV R1, ECRA_OVNIS
-    CALL seleciona_ecra
+    MOV R1, OVNI_INDICE_ECRA
+    SHL R1, 1
+    MOV R1, [R0 + R1]
     CALL apagar_ecra
 
     MOV R4, OVNI_INDICE_COR
@@ -706,7 +751,6 @@ evolucao_ovni:
     MOV R6, [R0 + R4]
     CALL alterar_cor_caneta
 
-    MOV R0, ovni_1 ; Obt�m o endere�o da mem�ria onde o ovni está guardado
     MOV R3, [R0 + R9]         ; coordenada Y
     MOV R4, [R0 + R8]      ; coordenada X
     MOV R1, [R0 + R5]
@@ -971,7 +1015,9 @@ verifica_colisao_missil:
     MOV R2, 0
     CALL alterar_estado_ovni
 
-    MOV R1, ECRA_OVNIS
+    MOV R2, OVNI_INDICE_ECRA
+    SHL R2, 1
+    MOV R1, [R0 + R2]
     CALL apagar_ecra
 
     MOV R1, ECRA_EXPLOSAO

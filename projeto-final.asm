@@ -7,9 +7,9 @@ DEFINE_PIXEL    EQU 601AH     ; endereço do comando para escrever um pixel
 DEFINE_PAUSA_MEDIA   EQU 6062H ; endereço do comando para pausar media
 DEFINE_DESPAUSA_MEDIA EQU 6064H ; endereço do comando para despausar media
 DEFINE_ECRA EQU 6004H ; endereço do comando para selecionar um ecrã
-
 DEFINE_VIDEO EQU 6048H   ; endereço para definir o video
 PLAY_VIDEO EQU 605AH    ; endereço para começar o video
+STOP_VIDEO EQU 6066H
 APAGA_ECRA     EQU 6000H     ; endere�o do comando para apagar todos os pixels do ecra selecionado
 APAGA_ECRAS     EQU 6002H      ; endere�o do comando para apagar todos os pixels de todos os ecr�s
 APAGA_AVISO     EQU 6040H      ; endere�o do comando para apagar o aviso de nenhum cen�rio selecionado
@@ -29,6 +29,8 @@ LIN_MIN EQU 0 ; linha minima do mediacenter
 DISPLAYS   EQU 0A000H ; endereço do display de 7 segmentos (periférico POUT-1)
 
 LARGURA_NAVE EQU 5 ; largura da nave em pixeis
+NAVE_COLUNA_INICIAL EQU 31
+NAVE_LINHA_INICIAL EQU 27
 
 VERDE EQU 0F0F0H ; cor verde
 VERMELHO EQU 0FF00H ; cor vemelha
@@ -48,7 +50,6 @@ COR_NAVE_INIMIGA EQU 0FF00H ; cor nave inimiga
 COR_OVNI EQU 0F999H ; cor do ovni distante
 COR_EXPLOSAO EQU 0F0DFH ; cor da explosao
 
-
 ENERGIA_DECREMENTO_TEMPO EQU 5 ; percentagem de diminuição de energia devido à passagem do tempo
 ENERGIA_DECREMENTO_MISSIL EQU 5 ; percentagem de diminuição de energia devido ao disparo de um missil
 ENERGIA_INCREMENTO_MINERACAO EQU 10 ; percentagem de aumento de energia devido à mineração de um asteroide
@@ -62,6 +63,7 @@ JOGO_TERMINAR EQU 0FFFFH ; estado do jogo terminado
 TECLA_COMECAR EQU 0CH ; tecla de começar o jogo
 TECLA_PAUSAR EQU 0DH ; tecla de pausar o jogo
 TECLA_TERMINAR EQU 0EH ; tecla para terminar o jogo atual
+TECLA_CREDITOS EQU 0FH
 
 TEC_LIN    EQU 0C000H  ; endereço das linhas do teclado (periférico POUT-2)
 TEC_COL    EQU 0E000H  ; endereço das colunas do teclado (periférico PIN)
@@ -88,6 +90,7 @@ SOM_EXPLOSAO_NAVE EQU 3
 SOM_MINERACAO EQU 4
 SOM_GAMEOVER EQU 5
 MUSICA EQU 6
+VIDEO_CREDITOS EQU 7
 
 OVNI_INDICE_TABELA_DESENHOS EQU 0
 OVNI_INDICE_DESENHO EQU 1
@@ -116,8 +119,8 @@ nave_pixeis:
   string 4h, 0Eh, 1Fh, 4h, 0Ah, terminador
 
 nave_coordenadas:
-  word 27               ; linha
-  word 31               ; coluna
+  word NAVE_LINHA_INICIAL             ; linha
+  word NAVE_COLUNA_INICIAL            ; coluna
 
 missil_pixeis:
   string 1, terminador
@@ -290,12 +293,9 @@ SP_inicial:                   ; este � o endere�o (1200H) com que o SP deve 
 PLACE 0
 inicio:
   MOV  SP, SP_inicial      ; inicializa SP
-
   MOV BTE, tabela_interrupcoes ; inicializa a Tabela de Exceções
 
-  MOV R1, 0
-  MOV  R0, APAGA_ECRAS
-  MOV  [R0], R1            ; apaga todos os pixels de todos os ecrãs (o valor de R1 não é relevante)
+  CALL apagar_ecras
 
   MOV  R0, APAGA_AVISO
   MOV  [R0], R1            ; apaga o aviso de nenhum cenário selecionado (o valor de R1 não é relevante)
@@ -306,11 +306,7 @@ inicio:
   CALL mostra_imagem ; mostra a imagem inicial
   MOV R4, 0
 
-  ; permitir interrupções
-  EI0
-  EI1
-  EI2
-  EI
+
 
 
 
@@ -539,6 +535,9 @@ ovni:
 
   MOV R2, 0
   MOV [R0 + R1], R2 ; se nao estiver a 0, alteramos o valor para 0
+
+  MOV R1, ECRA_EXPLOSAO
+  CALL apagar_ecra
 
   MOV R11, ovnis
   MOV R3, 0
@@ -913,7 +912,6 @@ deteta_colisao_ovni:
   RET
 
 
-
 ; **********************************************************************
 ; verifica_limites_ovni-  verifica se o ovni saiu dos limites do ecra
 ;
@@ -924,7 +922,6 @@ verifica_limites_ovni:
   PUSH R1
   PUSH R2
   PUSH R3
-
 
   MOV R1, OVNI_INDICE_LINHA
   SHL R1, 1
@@ -959,8 +956,6 @@ verifica_colisao_missil:
   PUSH R8
   PUSH R11
 
-  MOV R1, ECRA_EXPLOSAO
-  CALL apagar_ecra
 
   MOV R1, estado_missil
   MOV R1, [R1]
@@ -1008,7 +1003,6 @@ verifica_colisao_missil:
     CALL aumentar_energia
 
   explode_ovni:
-
     MOV R9, SOM_EXPLOSAO_INIMIGO
     CALL tocar_media
     CALL desativar_missil ; desativa o missil
@@ -1018,7 +1012,7 @@ verifica_colisao_missil:
     MOV R2, OVNI_INDICE_ECRA
     SHL R2, 1
     MOV R1, [R0 + R2]
-    CALL apagar_ecra
+    CALL apagar_ecra ; apaga o ecra onde o ovni está desenhado
 
     MOV R1, ECRA_EXPLOSAO
     CALL seleciona_ecra ; seleciona o ecra
@@ -1032,8 +1026,8 @@ verifica_colisao_missil:
     SHL R1, 1
     MOV R4, [R0 + R1] ; coordenada X
 
-    MOV R1, explosao
-    MOV R11, 5  ; largura do ovni
+    MOV R1, explosao ; do ovni
+    MOV R11, 5  ; largura da explosao
     CALL desenha_objeto ; desenhar objeto
 
   sair_verifica_colisao_missil:
@@ -1102,7 +1096,6 @@ verifica_colisao_nave:
   MOV R9, SOM_EXPLOSAO_NAVE
   MOV R4, IMAGEM_EXPLOSAO
   CALL gameover
-  CALL apagar_ecras
   JMP sair_verifica_colisao_nave
 
   nave_colidiu_asteroide:
@@ -1122,8 +1115,6 @@ verifica_colisao_nave:
     POP R2
     POP R1
     RET
-
-
 
 
 
@@ -1216,6 +1207,10 @@ controlo:
   CMP R2, R4 ; se a tecla atual for igual à tecla antiga significa que nao deixámos de pressionar a tecla
   JZ sair_controlo ; nesse caso saimos
 
+
+  MOV R5, TECLA_CREDITOS
+  CMP R2, R5
+  JZ creditos          ; verificar se a tecla premida foi a tecla de mostrar os creditos
   MOV R5, TECLA_COMECAR
   CMP R2, R5
   JZ comecar          ; verificar se a tecla premida foi a tecla de começar
@@ -1228,6 +1223,12 @@ controlo:
   JMP sair_controlo ; caso seja uma tecla irrelevante, saimos
 
   comecar:
+
+    ; parar a reproducao do video de creditos
+    MOV R9, VIDEO_CREDITOS
+    MOV  R0, STOP_VIDEO
+    MOV  [R0], R9          ; para o video
+
     CMP R1, JOGO_CORRER ; verificar se o jogo já está a correr
     JZ sair_controlo ; se sim, saimos da rotina
     MOV R3, JOGO_CORRER ;
@@ -1236,7 +1237,21 @@ controlo:
     CALL tocar_media   ; toca o video
     MOV R9, MUSICA
     CALL tocar_media
+
+    ; permitir interrupções
+    EI0
+    EI1
+    EI2
+    EI
     JMP modificar_estado ; salta para modificar o estado do jogo
+
+  creditos:
+    MOV R2, JOGO_TERMINAR
+    CMP R1, R2
+    JNZ sair_controlo
+    MOV R9, VIDEO_CREDITOS
+    CALL tocar_media
+    JMP sair_controlo
 
   pausar:
     CMP R1, JOGO_CORRER
@@ -1258,10 +1273,8 @@ controlo:
 
   terminar:
     MOV R4, IMAGEM_GAMEOVER
-    CALL mostra_imagem ; mostra a imagem de gameover
-    CALL pausa_media ; pausa recursos multimedia
+    CALL gameover
     MOV R3, JOGO_TERMINAR
-    CALL apagar_ecras
     JMP modificar_estado ; define o estado do jogo como terminado
 
   modificar_estado:
@@ -1275,7 +1288,6 @@ controlo:
     POP R2
     POP R1
     RET
-
 
 
 
@@ -1296,9 +1308,6 @@ gerador:
 
 
 
-
-
-
 desativar_missil:
   PUSH R1
   PUSH R4
@@ -1315,28 +1324,6 @@ desativar_missil:
   POP R1
   RET
 
-
-; **********************************************************************
-; desenha_explosao  desenha a explosao na posicao do ovni
-;
-; Argumentos:   R0 - base da tabela do ovni
-;
-; **********************************************************************
-desenha_explosao:
-  PUSH R1
-  PUSH R3
-  PUSH R4
-  PUSH R6
-  PUSH R11
-
-
-
-  POP R11
-  POP R6
-  POP R4
-  POP R3
-  POP R1
-  RET
 
 
 
@@ -1491,9 +1478,6 @@ alterar_cor_caneta:
 
 
 
-
-
-
 ; **********************************************************************
 ; MOVIMENTA_NAVE - movimenta a nave de acordo com a tecla pressionada
 ;
@@ -1547,15 +1531,6 @@ movimenta_nave:
     POP R2
     POP R1
     RET
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1639,6 +1614,17 @@ desenha_linha:
 desenha_pixel:
       PUSH  R0
 
+      ; verificar se não estamos a desenhar pixeis fora do ecrã
+      MOV R0, LIN_MAX
+      CMP R3, R0
+      JGT sair_desenha_pixel
+      MOV R0, COL_MIN
+      CMP R9, R0
+      JLT sair_desenha_pixel
+      MOV R0, COL_MAX
+      CMP R9, R0
+      JGT sair_desenha_pixel
+
       MOV R10, 0
       CMP R6, R10
       JZ desenha
@@ -1652,6 +1638,7 @@ desenha_pixel:
         MOV  [R0], R6           ; escreve o pixel com a cor da caneta na linha e coluna selecionadas
         ADD R9, 1 ; proxima coluna
 
+  sair_desenha_pixel:
         POP  R0
         RET
 
@@ -1802,7 +1789,9 @@ apagar_ecra:
   POP R0
   RET
 
-
+; **********************************************************************
+; PAGAR_ECRAS - Apaga todos os pixeis de todos os ecras
+; **********************************************************************
 apagar_ecras:
   PUSH R0
   PUSH R1
@@ -1816,49 +1805,68 @@ apagar_ecras:
 
 
 ; **********************************************************************
-; gameover - trata de quando o jogador perde o jogo
+; gameover - trata de quando o jogador perde o jogo (ou o jogo é terminado)
 ;
 ; Argumento:   R9 - som a tocar
 ;              R4 - imagem a mostrar
 ;
 ; **********************************************************************
 gameover:
+  PUSH R0
+  PUSH R2
   PUSH R3
+  PUSH R4
+  PUSH R5
+  PUSH R11
+
   CALL pausa_media
   CALL tocar_media
   CALL apagar_ecras
   MOV R3, JOGO_TERMINAR
   CALL alterar_estado_jogo ; altera o estado de jogo
   CALL mostra_imagem
-  POP R3
-  RET
 
+  ; alterar o estado do missil para 0 (inativo)
+  MOV R1, estado_missil
+  MOV R2, 0
+  MOV [R1], R2
 
+  ; alterar as coordenas da nave para o seu valor inicial
+  MOV R1, nave_coordenadas
+  MOV R2, NAVE_LINHA_INICIAL
+  MOV R3, NAVE_COLUNA_INICIAL
+  MOV [R1], R2
+  MOV [R1 + 2], R3
 
+  MOV R11, ovnis
+  MOV R3, 0
+  MOV R4, NUMERO_OVNIS
+  SHL R4, 1
+  ciclo_ovnis_desativar: ; desativar todos os ovnis ativos
+    MOV R0, [R11 + R3]
+    ADD R3, 2
+    CMP R3, R4
+    JGT sair_gameover
+    MOV R5, OVNI_INDICE_ESTADO
+    SHL R5, 1 ; multiplicar o indice por dois porque estamos a aceder a uma tabela de words
+    MOV R2, [R0 + R5] ; obtem o estado do ovni (inativo ou ativo)
+    CMP R2, 1 ; se estiver ativo então temos que desativar o ovni
+    JZ desativa
+    JMP ciclo_ovnis_desativar
 
+  desativa:
+    MOV R2, 0
+    CALL alterar_estado_ovni
+    JMP ciclo_ovnis_desativar
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  sair_gameover:
+    POP R11
+    POP R5
+    POP R4
+    POP R3
+    POP R2
+    POP R0
+    RET
 
 
 
@@ -1866,7 +1874,7 @@ gameover:
 
 
 ;*********************************************************************************
-;* Rotinas Interrup��o
+; Rotinas Interrup��o
 ;*********************************************************************************
 
 relogio_ovnis:

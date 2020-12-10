@@ -356,49 +356,50 @@ teclado:
   PUSH R5
   PUSH R6
 
-  MOV R0, ultima_tecla			; Obt�m endere�o da mem�ria onde a  ultima tecla está guardada
-  MOV R1, tecla_premida ; Obt�m endere�o da mem�ria onde a tecla premida está guardada
-  MOV R1, [R1] ; Obtem o valor da variavel
+  MOV R0, ultima_tecla			; obtém endereço da memória onde a ultima tecla está guardada
+  MOV R1, tecla_premida ; obtém endereço da memória onde a tecla premida está guardada
+  MOV R1, [R1] ; Obtem a tecla premida
   MOV [R0], R1 ; escreve na variavel ultima_tecla o valor atual da variavel tecla_premida
 
-  MOV  R2, TEC_LIN    ; Obt�m endere�o das linhas (periferico)
-  MOV  R3, TEC_COL    ; Obt�m endere�o das colunas (periferico)
-  MOV  R1, 8			; Linha onde come�a a verificar o teclado
+  MOV  R3, TEC_COL    ; obtém o endereço das colunas
+  MOV  R2, TEC_LIN    ; obtém o endereço das linhas
+  MOV  R1, 8			; premeira linha a verificar
 
-  loop_teclado:          ; Neste ciclo verificam-se todas as linhas do teclado
-    MOVB [R2], R1      ; Escreve a linha a verificar no perif�rico
-    MOVB R0, [R3]      ; L� do perif�rico a linha da tecla pressionada
-    CMP  R0, 0         ; Verifica se h� tecla premida
-    JNZ  clique        ; Se uma tecla estiver premida salta
-    SHR R1, 1		   ; Calcula a pr�xima linha
-    JZ sem_tecla	   ; Se j� verificou todas as linhas sai
-    JMP loop_teclado   ; Salta para manter o loop
+  ciclo_teclado:  ; percorrer todas as linhas do teclado
+    MOVB [R2], R1 ; escreve a linha a verificar no periférico
+    MOVB R0, [R3] ; lê a linha da tecla pressionada
+    CMP  R0, 0 ; verifica se alguma tecla foi premida
+    JNZ tecla_pressionada ; se sim, salta
+    SHR R1, 1	; dividir por dois a linha atual para obter a proxima linha
+    JZ sem_tecla ; se já chegamos à ultima linha a verificar entao saltamos pois nao houve tecla premida
+    JMP ciclo_teclado ; volta ao inicio do ciclo
 
-  clique:
-    MOV R5, -1          ; Guarda -1 em R5 para contagem de divisoes
-    conv_linha:         ; Converte linha(1,2,4,8) para (0,1,2,3) para calculos futuros
-      SHR R1, 1       ; Por cada shift
-      ADD R5, 1       ; Adiciona 1 para ficar 0-based
-      CMP R1, 0       ; Verifica se j� chegou ao fim do loop
-      JNZ conv_linha  ; Caso contr�rio continua at� R1 ser 0
+  tecla_pressionada:
+    MOV R5, -1          ; guarda -1 em R5 para contagem de divisoes
+    converter_linha:   ; converte a linha (1,2,4,8) para (0,1,2,3)
+      SHR R1, 1       ; dividir por 2
+      ADD R5, 1       ; conta o numero de divisoes
+      CMP R1, 0       ; se ainda nao chegamos a 0 saltamos para o inicio do ciclo
+      JNZ converter_linha
 
-    MOV R6, -1			; Guarda -1 em R6 para contagem de divisoes
-    conv_coluna:	    ; Converte coluna(1,2,4,8) para (0,1,2,3) para calculos futuros
-      SHR R0, 1		; Por cada shift
-      ADD R6, 1       ; Adiciona 1 para ficar 0-based
-      CMP R0, 0		; Verifica se j� chegou ao fim do loop
-      JNZ conv_coluna ; Caso contr�rio continua at� R0 ser 0
+    MOV R6, -1			; guarda -1 em R6 para contagem de divisoes
+    converter_coluna:	   ; converte a coluna (1,2,4,8) para (0,1,2,3)
+      SHR R0, 1		; divir por 2
+      ADD R6, 1   ; conta o numero de divisoes
+      CMP R0, 0		; se ainda nao chegamos a 0 saltamos para o inicio do ciclo
+      JNZ converter_coluna
 
-    SHL R5,2   			; Calculo da formula 4*linha + coluna para obter tecla
-    ADD R5, R6
+    ; calcula a tecla premida através da formula  tecla = 4*linha + coluna
+    SHL R5,2 ; multiplicar por 4
+    ADD R5, R6 ; adicionar a coluna
     JMP fim_verificar_teclado
 
-    sem_tecla:			; Se n�o houver tecla premida escreve -1 no registo que guarda a tecla
+    sem_tecla: ; -1 indica que nao houve tecla premida
       MOV R5, -1
 
   fim_verificar_teclado:
-    MOV R0, tecla_premida			; Obt�m endere�o da mem�ria onde a tecla est� guardada
-    MOV [R0], R5			; Guarda nova tecla na vari�vel global tecla_premida
+    MOV R0, tecla_premida			; Obtém endereço da memória onde a tecla está guardada
+    MOV [R0], R5			; guarda a tecla obtida na memória
 
   POP R6
   POP R5
@@ -1362,18 +1363,19 @@ controlo:
   JMP sair_controlo ; caso seja uma tecla irrelevante, saimos
 
   comecar:
-    CMP R1, JOGO_CORRER
-    JZ sair_controlo
-    CALL inicializar
-    CALL desenha_nave
     CMP R1, JOGO_CORRER ; verificar se o jogo já está a correr
     JZ sair_controlo ; se sim, saimos da rotina
-    MOV R3, JOGO_CORRER ;
+
+    CALL desenha_nave
+    MOV R3, JOGO_CORRER ; define o argumento da rotina alterar_estado_jogo
     CALL inicializar    ; inicialiar tudo com o seu valor original
     MOV R9, VIDEO
     CALL tocar_media   ; toca o video
     MOV R9, MUSICA
     CALL tocar_media ; toca a musica
+    MOV R9, VIDEO_CREDITOS
+    CALL termina_media ; termina de tocar o som dos creditos
+    CALL inicializar
     JMP modificar_estado ; salta para modificar o estado do jogo
 
   creditos:
@@ -1391,21 +1393,22 @@ controlo:
     JZ despausa_jogo ; se o jogo esta em pausa mudamos o seu estado para correr
     JMP sair_controlo
     pausa_jogo:
-      MOV R3, JOGO_PAUSA
+      MOV R3, JOGO_PAUSA ; define o argumento da rotina alterar_estado_jogo
       CALL pausa_media ; pausa os recursos multimedia
       MOV R4, IMAGEM_PAUSA ; define a imagem a mostar, neste caso a imagem de pausa
-      CALL mostra_imagem ; mostra a imagem selecionada
+      CALL mostra_imagem ; mostra a imagem de pausa
       JMP modificar_estado ; salta para modificar o estado do jogo
     despausa_jogo:
       CALL despausa_media ; despausa os recursos multimedia
       CALL apagar_imagem ; apaga a imagem de foreground
-      MOV R3, JOGO_CORRER
+      MOV R3, JOGO_CORRER ; define o argumento da rotina alterar_estado_jogo
       JMP modificar_estado ; salta para modificar o estado do jogo
 
   terminar:
-    MOV R3, JOGO_TERMINAR
+    MOV R3, JOGO_TERMINAR ; define o argumento da rotina alterar_estado_jogo
     CMP R1, R3
-    JZ sair_controlo
+    JZ sair_controlo ; se o estado do jogo já está como terminado entao saimos
+
     MOV R4, IMAGEM_GAMEOVER
     CALL gameover
     JMP sair_controlo
@@ -1472,7 +1475,6 @@ inicializar:
   PUSH R2
   PUSH R9
 
-  MOV R9, VIDEO_CREDITOS
   CALL termina_media
   MOV R1, energia  ; base da tabela da energia
   MOV R2, ENERGIA_INICIAL ; inicializa r2 com a energia inicial da nave
@@ -1906,16 +1908,16 @@ gameover:
   PUSH R3
   PUSH R4
   PUSH R5
+  PUSH R9
   PUSH R11
 
-  CALL pausa_media
+  MOV R9, MUSICA
+  CALL termina_media
   CALL tocar_media
   CALL apagar_ecras
   MOV R3, JOGO_TERMINAR
   CALL alterar_estado_jogo ; altera o estado de jogo
   CALL mostra_imagem
-
-
 
   ; alterar o estado do missil para 0 (inativo)
   MOV R1, estado_missil
@@ -1952,6 +1954,7 @@ gameover:
 
   sair_gameover:
     POP R11
+    POP R9
     POP R5
     POP R4
     POP R3

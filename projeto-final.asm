@@ -8,8 +8,9 @@ DEFINE_PAUSA_MEDIA   EQU 6062H ; endereço do comando para pausar media
 DEFINE_DESPAUSA_MEDIA EQU 6064H ; endereço do comando para despausar media
 DEFINE_ECRA EQU 6004H ; endereço do comando para selecionar um ecrã
 DEFINE_VIDEO EQU 6048H   ; endereço para definir o video
-PLAY_VIDEO EQU 605AH    ; endereço para começar o video
-STOP_VIDEO EQU 6066H
+PLAY_VIDEO EQU 605AH    ; endereço para começar o video ou som
+LOOP_VIDEO EQU 605CH   ; endereço para começar em loop o video ou som
+STOP_VIDEO EQU 6066H ; endereço para terminar o video ou som
 APAGA_ECRA     EQU 6000H     ; endere�o do comando para apagar todos os pixels do ecra selecionado
 APAGA_ECRAS     EQU 6002H      ; endere�o do comando para apagar todos os pixels de todos os ecr�s
 APAGA_AVISO     EQU 6040H      ; endere�o do comando para apagar o aviso de nenhum cen�rio selecionado
@@ -41,7 +42,7 @@ DISPARA_MISSIL EQU 5
 
 VELOCIDADE_NAVE EQU 1 ; velocidade da nave
 VELOCIDADE_MISSIL EQU 1 ; velocidade do missil
-ALCANCE_MISSIL EQU 6 ; linha limite do missil
+ALCANCE_MISSIL EQU 12 ; linha limite do missil
 
 COR_NAVE EQU 0FFF0H ; cor da nave
 COR_MISSIL EQU 0FF0FH ; cor do missil
@@ -68,16 +69,16 @@ TECLA_CREDITOS EQU 0FH
 TEC_LIN    EQU 0C000H  ; endereço das linhas do teclado (periférico POUT-2)
 TEC_COL    EQU 0E000H  ; endereço das colunas do teclado (periférico PIN)
 
-IMAGEM_INICIO EQU 0 ; Indice da imagem inicial
-IMAGEM_PAUSA EQU 1 ; Indice da imagem de pausa
-IMAGEM_GAMEOVER EQU 2 ; Indice da imagem de gameover
-IMAGEM_EXPLOSAO EQU 3 ; Indice da imagem de explosao
+IMAGEM_PAUSA EQU 0 ; Indice da imagem de pausa
+IMAGEM_GAMEOVER EQU 1 ; Indice da imagem de gameover
+IMAGEM_EXPLOSAO EQU 2 ; Indice da imagem de explosao
 
 INDICE_OVNIS EQU 0 ; indice da interrupção responsavel pelos ovnis na tabela de interrupções
 INDICE_MISSIL EQU 1 ; indice da interrupção responsavel pelo missil na tabela de interrupções
 INDICE_ENERGIA EQU 2 ; indice da interrupção responsavel pela energia na tabela de interrupções
 
 FATOR_1000 EQU 1000
+FATOR_100 EQU 100
 
 ECRA_NAVE EQU 0 ; ecra da nave
 ECRA_MISSIL EQU 1 ; ecra do missil
@@ -91,6 +92,7 @@ SOM_MINERACAO EQU 4 ; indice do som de mineração
 SOM_GAMEOVER EQU 5 ; indice do som de gameover
 MUSICA EQU 6 ; indice da musica
 VIDEO_CREDITOS EQU 7 ; indice dos créditos
+VIDEO_INTRO EQU 8 ; indice do video inicial
 
 OVNI_INDICE_TABELA_DESENHOS EQU 0 ; indice da tabela de desenhos do ovni
 OVNI_INDICE_DESENHO EQU 1 ; indice do desenho atual do ovni
@@ -288,17 +290,44 @@ inicio:
   MOV  R0, APAGA_AVISO
   MOV  [R0], R1            ; apaga o aviso de nenhum cenário selecionado (o valor de R1 não é relevante)
   CALL apagar_imagem ; apaga qualquer imagem do mediacenter
-  CALL inicializar ; inicializar o jogo
+  CALL apagar_ecras ; apagar ecras
+  MOV R2,ENERGIA_INICIAL
+  CALL atualiza_display
 
-  MOV R4, IMAGEM_INICIO
-  CALL mostra_imagem ; mostra a imagem inicial
-  MOV R4, 0
+  MOV R9, VIDEO_INTRO
+  CALL loop_media ; mostra o video incial
+
+
+ecra_inicial:
+  CALL gerador
+  CALL teclado
+  MOV R10, tecla_premida
+  MOV R10, [R10]
+  MOV R11, TECLA_COMECAR
+  CMP R10, R11
+  JNZ ecra_inicial
+
+  MOV R9, VIDEO_CREDITOS
+  CALL termina_media
+  MOV R9, VIDEO_INTRO
+  CALL termina_media
+  CALL desenha_nave
+  MOV R3, JOGO_CORRER
+  CALL alterar_estado_jogo
+  MOV R9, VIDEO
+  CALL tocar_media   ; toca o video
+  MOV R9, MUSICA
+  CALL tocar_media ; toca a musica
 
   ; permitir interrupções
   EI0
   EI1
   EI2
   EI
+
+  CALL inicializar ; inicializar o jogo
+
+
 
 
 
@@ -424,9 +453,6 @@ nave:
     MOV R2, [R2]      ; verifica a tecla premida
     CMP R2, 0         ; se a tecla pressionada for menor que 0 significa que nenhuma tecla foi pressionada
     JLT sair_nave    ; logo nao temos que movimentar a nave
-    MOV R3, TECLA_COMECAR ; verificar se a tecla pressionada é a de começar o jogo
-    CMP R2, R3  ; se a tecla pressionada for a de começar o jogo entao desenhamos a nave pela primeira vez
-    JZ lida_tecla_comecar
 
     SHL R2, 1         ; multiplicar R2 por 2 porque a func_nave é uma tabela de words
     MOV R3, func_nave ; base da tabela das funcionalidades da nave
@@ -437,8 +463,6 @@ nave:
     JZ nave_missil
     JMP nave_movimenta   ; caso a tecla premida nao seja nenhuma das anterioes então movimentamos a nave
 
-  lida_tecla_comecar:
-    MOV R3, 0 ; neste caso queremos a velocidade a 0, para apenas desenhar a nave
 
   nave_movimenta:
     CALL movimenta_nave ; movimenta a nave
@@ -1338,13 +1362,10 @@ controlo:
   JMP sair_controlo ; caso seja uma tecla irrelevante, saimos
 
   comecar:
-    ; parar a reproducao do video de creditos
-    MOV R9, VIDEO_CREDITOS
-    MOV  R0, STOP_VIDEO
-    MOV  [R0], R9          ; para o video
+    CMP R1, JOGO_CORRER
+    JZ sair_controlo
     CALL inicializar
-
-
+    CALL desenha_nave
     CMP R1, JOGO_CORRER ; verificar se o jogo já está a correr
     JZ sair_controlo ; se sim, saimos da rotina
     MOV R3, JOGO_CORRER ;
@@ -1449,6 +1470,10 @@ seleciona_ecra:
 inicializar:
   PUSH R1
   PUSH R2
+  PUSH R9
+
+  MOV R9, VIDEO_CREDITOS
+  CALL termina_media
   MOV R1, energia  ; base da tabela da energia
   MOV R2, ENERGIA_INICIAL ; inicializa r2 com a energia inicial da nave
   MOV [R1], R2 ; guarda o valor na memoria
@@ -1456,6 +1481,7 @@ inicializar:
   CALL apagar_imagem ; apagar qualquer imagem do mediacenter
   CALL apagar_ecras ; apaga todos os ecras
 
+  CALL desenha_nave
   ; inicializar as words da tabela de eventos a 0
   MOV R2, 0
   MOV R1, tabela_eventos
@@ -1463,6 +1489,7 @@ inicializar:
   MOV [R1+2], R2
   MOV [R1+4], R2
 
+  POP R9
   POP R2
   POP R1
   RET
@@ -1560,6 +1587,35 @@ alterar_cor_caneta:
   MOV  [R0], R6          ; altera a cor da caneta
   POP R0
   RET
+
+
+; **********************************************************************
+; termina_media- termina a reprodução do video ou som especificado
+;
+; Argumentos: R9 - video ou som a terminar
+;
+; **********************************************************************
+termina_media:
+  PUSH R0
+  MOV  R0, STOP_VIDEO
+  MOV  [R0], R9          ; para o video
+  POP R0
+  RET
+
+
+  ; **********************************************************************
+  ; loop_media- toca o video ou som especificado
+  ;
+  ; Argumentos: R9 - video ou som a reproduzir
+  ;
+  ; **********************************************************************
+  loop_media:
+    PUSH R0
+    MOV  R0, LOOP_VIDEO
+    MOV  [R0], R9          ; para o video
+    POP R0
+    RET
+
 
 
 ; **********************************************************************
@@ -1688,27 +1744,29 @@ aumentar_energia:
   PUSH R3
   PUSH R5
   PUSH R6
-  PUSH R7
-
 
   MOV R1, energia  ; base da tabela da energia
   MOV R2, [R1] ; le o valor de energia
 
   MOV R6, ENERGIA_INICIAL
-  MOV R7, 100
+  MOV R3, FATOR_100
   MUL R6, R5 ; multiplicar a energia inicial pelo valor de diminuição
-  DIV R6, R7 ; dividir o resultado por 100
+  DIV R6, R3 ; dividir o resultado por 100
 
-  ADD R2, R6; diminui a energia
+  ADD R2, R6; aumenta a energia
   MOV R3, ENERGIA_INICIAL
   CMP R2, R3
-  JGE sair_aumentar_energia ; se a energia já estiver no maximo nao aumentamos e saimos da rotina
+  JGE lida_energia_maxima ; verificar se a energia nao ultrapassa os 100%
+  JMP atualiza_energia
 
-  MOV [R1], R2 ; guarda o novo valor na memoria
-  CALL atualiza_display ; atualiza os displays com o novo valor da energia
+  lida_energia_maxima:
+    MOV R2, ENERGIA_INICIAL
+
+  atualiza_energia:
+    MOV [R1], R2 ; guarda o novo valor na memoria
+    CALL atualiza_display ; atualiza os displays com o novo valor da energia
 
   sair_aumentar_energia:
-    POP R7
     POP R6
     POP R5
     POP R3
@@ -1737,9 +1795,9 @@ diminuir_energia:
   MOV R2, [R1] ; le o valor de energia
 
   MOV R6, ENERGIA_INICIAL
-  MOV R7, 100
+  MOV R3, FATOR_100
   MUL R6, R5 ; multiplicar a energia inicial pelo valor de diminuição
-  DIV R6, R7 ; dividir o resultado por 100
+  DIV R6, R3 ; dividir o resultado por 100
 
   SUB R2, R6; diminui a energia
 

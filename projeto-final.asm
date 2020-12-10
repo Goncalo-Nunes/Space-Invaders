@@ -158,6 +158,10 @@ pixeis_nave_inimiga_5:
   string 11H, 0AH, 4H, 0AH, 11H, terminador
 
 
+; EXPLOSAO
+explosao:
+  string 0AH, 15H, 0AH, 15H, 0AH, terminador
+
 ;tabela com os desenhos dos asteroides
 desenho_asteroide:
   WORD pixeis_ovni_1
@@ -222,12 +226,6 @@ ovnis: ; tabela dos ovnis
   WORD ovni_1
   WORD ovni_2
   WORD ovni_3
-
-
-
-; EXPLOSAO
-explosao:
-  string 0AH, 15H, 0AH, 15H, 0AH, terminador
 
 
 ; funcionalidades da nave
@@ -296,7 +294,6 @@ inicio:
   CALL mostra_imagem ; mostra a imagem inicial
   MOV R4, 0
 
-
   ; permitir interrupções
   EI0
   EI1
@@ -318,7 +315,10 @@ ciclo:
 
 
 
-
+; **********************************************************************
+; teclado - Processo cooperativo responsalvel por ler o periférico teclado
+;           e armazenar a ultima tecla pressinada numa variável
+; **********************************************************************
 teclado:
   PUSH R0
   PUSH R1
@@ -327,8 +327,8 @@ teclado:
   PUSH R5
   PUSH R6
 
-  MOV R0, ultima_tecla			; Obt�m endere�o da mem�ria onde a  ultima tecla est� guardada
-  MOV R1, tecla_premida ; Obt�m endere�o da mem�ria onde a  ultima tecla est� guardada
+  MOV R0, ultima_tecla			; Obt�m endere�o da mem�ria onde a  ultima tecla está guardada
+  MOV R1, tecla_premida ; Obt�m endere�o da mem�ria onde a tecla premida está guardada
   MOV R1, [R1] ; Obtem o valor da variavel
   MOV [R0], R1 ; escreve na variavel ultima_tecla o valor atual da variavel tecla_premida
 
@@ -380,7 +380,10 @@ teclado:
   RET
 
 
-
+; **********************************************************************
+; nave - Processo cooperativo responsalvel por desenhar e movimentar a nave
+;        e disparar o missil
+; **********************************************************************
 nave:
   PUSH R1
   PUSH R2
@@ -482,6 +485,12 @@ nave:
     RET
 
 
+;!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+;
+; Rotinas Auxiliares da Nave
+;
+;!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 ; **********************************************************************
 ; MOVIMENTA_NAVE - movimenta a nave de acordo com a tecla pressionada
 ;
@@ -567,8 +576,10 @@ desenha_nave:
 
 
 
-
-
+; **********************************************************************
+; ovni - Processo cooperativo responsalvel por desenhar, movimentar,
+;       verificar colisoes e ativar os ovnis
+; **********************************************************************
 ovni:
   PUSH R0
   PUSH R1
@@ -649,7 +660,11 @@ ovni:
     POP R0
     RET
 
-
+;!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+;
+; Rotinas Auxiliares do Ovni
+;
+;!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 ; **********************************************************************
 ; MOVIMENTA_OVNI- Movimenta um determinado ovni
@@ -701,7 +716,8 @@ movimenta_ovni:
 
 
 ; **********************************************************************
-; EVOLUCAO_OVNI-  Trata da evolucao de um determinado ovni
+; EVOLUCAO_OVNI-  Trata da evolucao de um determinado ovni, dando-lhe cor,
+;                 desenho apropriado, altura e largura
 ;
 ; Argumentos:   R0 - base da tabela do ovni
 ;
@@ -772,8 +788,6 @@ evolucao_ovni:
     POP R2
     POP R1
     RET
-
-
 
 
 ; **********************************************************************
@@ -1186,7 +1200,10 @@ verifica_colisao_nave:
 
 
 
-
+; **********************************************************************
+; missil - Processo cooperativo responsalvel por movimentar,
+;          desenhar e desativar o missil
+; **********************************************************************
 missil:
   PUSH R0
   PUSH R1
@@ -1258,6 +1275,10 @@ missil:
     RET
 
 
+;!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+; Rotina Auxiliar do missil
+;!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 ; **********************************************************************
 ; desativar_missil-  altera o estado do missil para 0 (inativo)
 ; **********************************************************************
@@ -1278,7 +1299,11 @@ desativar_missil:
   RET
 
 
-
+; **********************************************************************
+; controlo - Processo cooperativo responsalvel pelo fluxo do jogo,
+;            alterando o estado do jogo consoante a tecla premida
+;
+; **********************************************************************
 controlo:
   PUSH R1
   PUSH R2
@@ -1357,10 +1382,12 @@ controlo:
       JMP modificar_estado ; salta para modificar o estado do jogo
 
   terminar:
+    MOV R3, JOGO_TERMINAR
+    CMP R1, R3
+    JZ sair_controlo
     MOV R4, IMAGEM_GAMEOVER
     CALL gameover
-    MOV R3, JOGO_TERMINAR
-    JMP modificar_estado ; define o estado do jogo como terminado
+    JMP sair_controlo
 
   modificar_estado:
     CALL alterar_estado_jogo ; modifica a variavel de estado do jogo para o novo valor
@@ -1376,6 +1403,11 @@ controlo:
 
 
 
+; **********************************************************************
+; gerador- Processo cooperativo responsalvel por incrementar uma variavel em memória
+;          o que irá permitir gerar numeros pseudo-aleatórios posteriormente
+;
+; **********************************************************************
 gerador:
   PUSH R0
   PUSH R1
@@ -1391,17 +1423,11 @@ gerador:
 
 
 
-
-
-
-
-
 ;!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ;
 ; Rotinas Auxiliares
 ;
 ;!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
 
 ; **********************************************************************
 ; SELECIONA_ECRA - Espefica um determinado ecrã
@@ -1824,12 +1850,13 @@ gameover:
   PUSH R5
   PUSH R11
 
-  CALL mostra_imagem
   CALL pausa_media
   CALL tocar_media
   CALL apagar_ecras
   MOV R3, JOGO_TERMINAR
   CALL alterar_estado_jogo ; altera o estado de jogo
+  CALL mostra_imagem
+
 
 
   ; alterar o estado do missil para 0 (inativo)
@@ -1873,8 +1900,6 @@ gameover:
     POP R2
     POP R0
     RET
-
-
 
 
 

@@ -345,7 +345,7 @@ ciclo:
 
 
 ; **********************************************************************
-; teclado - Processo cooperativo responsalvel por ler o periférico teclado
+; teclado - Processo cooperativo responsavel por ler o periférico teclado
 ;           e armazenar a ultima tecla pressinada numa variável
 ; **********************************************************************
 teclado:
@@ -411,7 +411,7 @@ teclado:
 
 
 ; **********************************************************************
-; nave - Processo cooperativo responsalvel por desenhar e movimentar a nave
+; nave - Processo cooperativo responsavel por desenhar e movimentar a nave
 ;        e disparar o missil
 ; **********************************************************************
 nave:
@@ -602,7 +602,7 @@ desenha_nave:
 
 
 ; **********************************************************************
-; ovni - Processo cooperativo responsalvel por desenhar, movimentar,
+; ovni - Processo cooperativo responsavel por desenhar, movimentar,
 ;       verificar colisoes e ativar os ovnis
 ; **********************************************************************
 ovni:
@@ -1226,7 +1226,7 @@ verifica_colisao_nave:
 
 
 ; **********************************************************************
-; missil - Processo cooperativo responsalvel por movimentar,
+; missil - Processo cooperativo responsavel por movimentar,
 ;          desenhar e desativar o missil
 ; **********************************************************************
 missil:
@@ -1325,7 +1325,7 @@ desativar_missil:
 
 
 ; **********************************************************************
-; controlo - Processo cooperativo responsalvel pelo fluxo do jogo,
+; controlo - Processo cooperativo responsavel pelo fluxo do jogo,
 ;            alterando o estado do jogo consoante a tecla premida
 ;
 ; **********************************************************************
@@ -1428,7 +1428,7 @@ controlo:
 
 
 ; **********************************************************************
-; gerador- Processo cooperativo responsalvel por incrementar uma variavel em memória
+; gerador- Processo cooperativo responsavel por incrementar uma variavel em memória
 ;          o que irá permitir gerar numeros pseudo-aleatórios posteriormente
 ;
 ; **********************************************************************
@@ -1475,7 +1475,6 @@ inicializar:
   PUSH R2
   PUSH R9
 
-  CALL termina_media
   MOV R1, energia  ; base da tabela da energia
   MOV R2, ENERGIA_INICIAL ; inicializa r2 com a energia inicial da nave
   MOV [R1], R2 ; guarda o valor na memoria
@@ -1725,9 +1724,9 @@ desenha_pixel:
         MOV  [R0], R9           ; seleciona a coluna
         MOV  R0, DEFINE_PIXEL
         MOV  [R0], R6           ; escreve o pixel com a cor da caneta na linha e coluna selecionadas
-        ADD R9, 1 ; proxima coluna
 
   sair_desenha_pixel:
+        ADD R9, 1 ; proxima coluna
         POP R10
         POP  R0
         RET
@@ -1892,7 +1891,6 @@ apagar_ecras:
   POP R1
   POP R0
   RET
-
 
 
 ; **********************************************************************

@@ -1,4 +1,13 @@
-; PROJETO - VERSÃO FINAL
+
+;****************************** Grupo 12 *******************************
+; Afonso Carvalho 99046
+; Gonçalo Nunes 99074
+; Vasco Silva 99132
+;***********************************************************************
+
+; **********************************************************************
+; * Constantes
+; **********************************************************************
 
 terminador  EQU 0
 DEFINE_LINHA    EQU 600AH      ; endereço do comando para definir a linha
@@ -164,7 +173,7 @@ pixeis_nave_inimiga_5:
 explosao:
   string 0AH, 15H, 0AH, 15H, 0AH, terminador
 
-;tabela com os desenhos dos asteroides
+; tabela com os desenhos dos asteroides
 desenho_asteroide:
   WORD pixeis_ovni_1
   WORD pixeis_ovni_2
@@ -223,8 +232,8 @@ ovni_3:
   WORD 1 ; largura do ovni
   WORD 5 ; ecra do ovni
 
-
-ovnis: ; tabela dos ovnis
+; tabela dos ovnis
+ovnis: ; vamos iterar sobre esta tabela para percorrer todos os ovnis
   WORD ovni_1
   WORD ovni_2
   WORD ovni_3
@@ -307,13 +316,13 @@ ecra_inicial:
   CMP R10, R11
   JNZ ecra_inicial
 
-  MOV R9, VIDEO_CREDITOS
-  CALL termina_media
-  MOV R9, VIDEO_INTRO
-  CALL termina_media
-  CALL desenha_nave
+  MOV R8, VIDEO_CREDITOS
+  CALL termina_media ; termina a reproducao do video creditos
+  MOV R8, VIDEO_INTRO
+  CALL termina_media ; termina a repordução do som video
+  CALL desenha_nave ; desenha a nave
   MOV R3, JOGO_CORRER
-  CALL alterar_estado_jogo
+  CALL alterar_estado_jogo ; altera o estado do jogo para a correr
   MOV R9, VIDEO
   CALL tocar_media   ; toca o video
   MOV R9, MUSICA
@@ -1373,7 +1382,7 @@ controlo:
     CALL tocar_media   ; toca o video
     MOV R9, MUSICA
     CALL tocar_media ; toca a musica
-    MOV R9, VIDEO_CREDITOS
+    MOV R8, VIDEO_CREDITOS
     CALL termina_media ; termina de tocar o som dos creditos
     CALL inicializar
     JMP modificar_estado ; salta para modificar o estado do jogo
@@ -1593,13 +1602,13 @@ alterar_cor_caneta:
 ; **********************************************************************
 ; termina_media- termina a reprodução do video ou som especificado
 ;
-; Argumentos: R9 - video ou som a terminar
+; Argumentos: R8 - video ou som a terminar
 ;
 ; **********************************************************************
 termina_media:
   PUSH R0
   MOV  R0, STOP_VIDEO
-  MOV  [R0], R9          ; para o video
+  MOV  [R0], R8          ; para o video
   POP R0
   RET
 
@@ -1760,7 +1769,7 @@ aumentar_energia:
   JGE lida_energia_maxima ; verificar se a energia nao ultrapassa os 100%
   JMP atualiza_energia
 
-  lida_energia_maxima:
+  lida_energia_maxima: ; não podemos permitir que a energia ultrapasse os 100% portanto quando isso acontecer definimos a energia a 100%
     MOV R2, ENERGIA_INICIAL
 
   atualiza_energia:
@@ -1810,9 +1819,9 @@ diminuir_energia:
   JMP sair_diminuir_energia
 
     diminuir_energia_gameover:
-    MOV R9, SOM_GAMEOVER
-    MOV R4, IMAGEM_GAMEOVER
-    CALL gameover
+      MOV R9, SOM_GAMEOVER
+      MOV R4, IMAGEM_GAMEOVER
+      CALL gameover
 
 
   sair_diminuir_energia:
@@ -1841,7 +1850,7 @@ atualiza_display:
 
   MOV R9, FATOR_1000
   converter_hex_para_dec:
-  MOV R0, R2                                 ; mover numero resultante das operações de incremento e decremnto para R0
+  MOV R0, R2                                 ; mover o numero que queremos converter para R0
   CMP R9, 0
   JZ atualiza                                ; se o fator for 0, atualizamos o display
   MOD R0, R9                                 ; Dividir contador pelo fator
@@ -1909,7 +1918,7 @@ gameover:
   PUSH R9
   PUSH R11
 
-  MOV R9, MUSICA
+  MOV R8, MUSICA
   CALL termina_media
   CALL tocar_media
   CALL apagar_ecras
@@ -1933,7 +1942,7 @@ gameover:
   MOV R3, 0
   MOV R4, NUMERO_OVNIS
   SHL R4, 1
-  ciclo_ovnis_desativar: ; desativar todos os ovnis ativos
+  ciclo_ovnis_desativar: ; percorre todos os ovnis e desativa-os
     MOV R0, [R11 + R3]
     ADD R3, 2
     CMP R3, R4
